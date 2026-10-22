@@ -23,6 +23,15 @@ async function startServer() {
     });
   });
 
+  // Endpoint cung cấp API key cấu hình hệ thống cho Client SDK
+  app.get('/api/key', (req, res) => {
+    const key = process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+    if (!key || key.trim() === '' || key === 'MY_GEMINI_API_KEY') {
+      return res.status(404).json({ error: 'Chưa cấu hình GEMINI_API_KEY.' });
+    }
+    return res.json({ key: key.trim() });
+  });
+
   /**
    * Endpoint Soát xét Hợp đồng chuyên sâu
    */
@@ -71,17 +80,48 @@ async function startServer() {
       // Model chuẩn: Gemini 3.8 Flash
       const targetModel = (model && model.trim()) || 'gemini-3.8-flash';
 
-      const response = await ai.models.generateContent({
-        model: targetModel,
-        contents: contentsParts,
-        config: {
-          responseMimeType: 'application/json',
-        }
-      });
-      const responseText = response.text || '[]';
+      // Tự động thử lại khi gặp 503/429
+      const maxRetries = 3;
+      let response: any = null;
+      let lastGenError: any = null;
 
-      if (!responseText) {
-        throw lastError || new Error('Không thể kết nối tới các model AI của Google.');
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          response = await ai.models.generateContent({
+            model: targetModel,
+            contents: contentsParts,
+            config: {
+              responseMimeType: 'application/json',
+            }
+          });
+          if (response?.text) {
+            break;
+          }
+        } catch (err: any) {
+          lastGenError = err;
+          const errMsg = String(err?.message || err || '');
+          const isOverload =
+            errMsg.includes('503') ||
+            errMsg.includes('high demand') ||
+            errMsg.includes('UNAVAILABLE') ||
+            errMsg.includes('429') ||
+            errMsg.includes('RESOURCE_EXHAUSTED');
+
+          if (isOverload && attempt < maxRetries) {
+            const delayMs = attempt * 2500;
+            console.warn(`[server.ts] Google 503/429 (lần ${attempt}/${maxRetries}), chờ ${delayMs}ms để tự động thử lại...`);
+            await new Promise(r => setTimeout(r, delayMs));
+            continue;
+          }
+          throw err;
+        }
+      }
+
+      const responseText = response?.text || '[]';
+
+      if (!responseText || responseText === '[]') {
+        if (lastGenError) throw lastGenError;
+        throw new Error('Không thể kết nối tới các model AI của Google.');
       }
 
       // Làm sạch và parse JSON

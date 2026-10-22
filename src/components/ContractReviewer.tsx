@@ -4,14 +4,14 @@ import {
   Loader2, Search, ArrowRight, XCircle, Info, UploadCloud, X, 
   File, Plus, FileSymlink, FileArchive, FileImage, Settings, Key, Check, DownloadCloud,
   Calculator, CheckSquare, Square, Filter, FileSpreadsheet, Eye, Printer, Trash2,
-  UserCheck
+  UserCheck, RefreshCw
 } from 'lucide-react';
 import { cn } from '../utils';
 import { processFile, ProcessedDoc } from '../lib/file-extractor';
 import { buildContractAuditPrompt } from '../lib/gemini-prompts';
 import { downloadTrackedDocx, FindingToApply } from '../lib/docx-track-changes';
 import { downloadAuditReport, AuditReportData } from '../lib/report-generator';
-import { executeContractReview, AVAILABLE_MODELS } from '../lib/gemini-service';
+import { executeContractReview, AVAILABLE_MODELS, formatGeminiErrorMessage } from '../lib/gemini-service';
 
 interface FindingWithSelection extends FindingToApply {
   category?: 'legal_authority' | 'financial_boq' | 'submission_mismatch' | 'format_compliance';
@@ -282,12 +282,17 @@ export function ContractReviewer() {
       // BƯỚC 4: Gửi yêu cầu Soát xét AI tự động qua máy chủ (Zero-Config cho người dùng)
       setLoadingStep(`BLUEMARQ AI Engine (${selectedModel}) đang phân tích toàn diện ma trận hợp đồng...`);
       
-      const rawFindings = await executeContractReview({
-        prompt,
-        mediaFiles,
-        apiKey: apiKey || undefined,
-        model: selectedModel,
-      });
+      const rawFindings = await executeContractReview(
+        {
+          prompt,
+          mediaFiles,
+          apiKey: apiKey || undefined,
+          model: selectedModel,
+        },
+        (statusMsg) => {
+          setLoadingStep(statusMsg);
+        }
+      );
       // Khởi tạo trạng thái mặc định: tất cả các lỗi đều được chọn để Track Changes
       const formattedFindings: FindingWithSelection[] = rawFindings.map((f, idx) => ({
         id: f.id || idx + 1,
@@ -303,7 +308,7 @@ export function ContractReviewer() {
       setFindings(formattedFindings);
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'Có lỗi xảy ra trong quá trình soát xét.');
+      setError(formatGeminiErrorMessage(err.message || err));
     } finally {
       setIsLoading(false);
       setLoadingStep('');
@@ -597,15 +602,30 @@ export function ContractReviewer() {
             {/* FOOTER CỐ ĐỊNH Ở ĐÁY CỘT TRÁI: NÚT BẮT ĐẦU SOÁT XÉT LUÔN NẰM TRÊN MÀN HÌNH */}
             <div className="p-3.5 bg-[#0E1F35] border-t border-[#1E3A5F] shrink-0 space-y-2">
               {error && (
-                <div className="p-2.5 bg-red-950/60 border border-red-500/50 rounded-lg flex items-start gap-2 shadow-lg text-xs text-red-300">
+                <div className="p-3 bg-red-950/70 border border-red-500/50 rounded-xl flex items-start gap-2.5 shadow-xl text-xs text-red-200">
                   <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-                  <div className="font-medium leading-tight flex-1">
-                    {error}
+                  <div className="font-medium leading-relaxed flex-1 space-y-2">
+                    <div>{error}</div>
+
+                    {(error.includes('503') || error.includes('quá tải') || error.includes('bận') || error.includes('demand') || error.includes('UNAVAILABLE') || error.includes('429') || error.includes('Failed to fetch') || error.includes('gián đoạn') || error.includes('Thử lại')) && (
+                      <div className="pt-0.5">
+                        <button
+                          type="button"
+                          onClick={handleReview}
+                          disabled={isLoading}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#C5A059] hover:bg-[#D4AF37] text-[#0B1A2D] font-bold text-xs rounded-lg shadow transition-all hover:scale-[1.02] active:scale-[0.98]"
+                        >
+                          <RefreshCw className={cn("w-3.5 h-3.5", isLoading && "animate-spin")} />
+                          <span>Thử lại ngay</span>
+                        </button>
+                      </div>
+                    )}
+
                     {error.includes('GEMINI_API_KEY') && (
                       <button
                         type="button"
                         onClick={() => setShowConfigModal(true)}
-                        className="block mt-1.5 text-[#C5A059] hover:text-[#D4AF37] underline font-bold transition-colors"
+                        className="block text-[#C5A059] hover:text-[#D4AF37] underline font-bold transition-colors"
                       >
                         👉 Hoặc bấm vào đây để dán API Key cá nhân dùng ngay
                       </button>

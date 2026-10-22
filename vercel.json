@@ -1,6 +1,16 @@
 {
   "framework": "vite",
+  "functions": {
+    "api/*.ts": {
+      "maxDuration": 60,
+      "memory": 1024
+    }
+  },
   "rewrites": [
+    {
+      "source": "/api/key",
+      "destination": "/api/key"
+    },
     {
       "source": "/api/review",
       "destination": "/api/review"
