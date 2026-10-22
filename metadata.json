@@ -1,0 +1,8 @@
+{
+  "name": "Contract Review Assistant",
+  "description": "An AI-powered in-house legal assistant that cross-references contract drafts with base documents to find discrepancies and suggest corrections.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

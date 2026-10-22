@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BlueMarq Contract Reviewer</title>
+    <script>
+      if (window.location.search.indexOf('_host_Info') > -1 || window.name.indexOf('office') > -1) {
+        var script = document.createElement('script');
+        script.src = 'https://appsforoffice.microsoft.com/lib/1/hosted/office.js';
+        document.head.appendChild(script);
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
