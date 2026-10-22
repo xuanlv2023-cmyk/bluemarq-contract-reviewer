@@ -633,10 +633,10 @@ export function ContractReviewer() {
                 </div>
               </div>
 
-              {/* CARD 2: BẢN THẢO HỢP ĐỒNG CẦN SOÁT XÉT (ĐỒNG NHẤT VIỀN VỚI MỤC 1) */}
+              {/* CARD 2: BẢN THẢO HỢP ĐỒNG CẦN SOÁT XÉT (ĐỒNG NHẤT VỚI MỤC 1) */}
               <div className="bg-[#0B1A2D]/70 rounded-xl border border-[#1E3A5F] p-3 sm:p-4">
                 <div className="flex items-center justify-between mb-1">
-                  <h3 className="text-xs font-bold text-slate-100 uppercase tracking-wider flex items-center gap-1.5">
+                  <h3 className="text-xs font-bold text-[#C5A059] uppercase tracking-wider flex items-center gap-1.5">
                     <Scale className="w-3.5 h-3.5 text-[#C5A059]" />
                     2. Bản thảo Hợp đồng cần soát xét
                   </h3>

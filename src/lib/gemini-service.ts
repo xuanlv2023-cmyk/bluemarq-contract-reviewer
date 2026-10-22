@@ -1,5 +1,3 @@
-import { GoogleGenAI } from '@google/genai';
-
 export interface MediaFilePayload {
   mimeType: string;
   base64: string;
@@ -20,7 +18,7 @@ export const AVAILABLE_MODELS = [
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
- * Làm sạch chuỗi thông báo lỗi (bóc tách JSON hoặc mã lỗi Google sang tiếng Việt thân thiện)
+ * Làm sạch chuỗi thông báo lỗi sang tiếng Việt thân thiện
  */
 export function formatGeminiErrorMessage(rawMsg: any): string {
   if (!rawMsg) return 'Đã xảy ra lỗi không xác định.';
@@ -32,7 +30,7 @@ export function formatGeminiErrorMessage(rawMsg: any): string {
     } else if (parsed?.error && typeof parsed.error === 'string') {
       text = parsed.error;
     }
-  } catch { }
+  } catch {}
 
   if (
     text.includes('504') ||
@@ -40,7 +38,7 @@ export function formatGeminiErrorMessage(rawMsg: any): string {
     text.includes('timed out') ||
     text.includes('Timeout')
   ) {
-    return 'Hợp đồng và tài liệu đính kèm khá dài nên quá trình phân tích cần thêm thời gian. Hệ thống đã tối ưu kênh truyền trực tiếp, vui lòng bấm nút "Thử lại ngay" bên dưới.';
+    return 'Hợp đồng và tài liệu đính kèm khá dài nên quá trình xử lý vượt quá thời gian cho phép. Hệ thống đã tối ưu kênh truyền trực tiếp, vui lòng bấm "Thử lại ngay".';
   }
 
   if (
@@ -57,7 +55,7 @@ export function formatGeminiErrorMessage(rawMsg: any): string {
   }
 
   if (text.includes('Failed to fetch') || text.includes('NetworkError') || text.includes('Load failed')) {
-    return 'Đường truyền kết nối tới máy chủ AI bị gián đoạn (Failed to fetch). Vui lòng kiểm tra lại kết nối mạng hoặc bấm "Thử lại ngay".';
+    return 'Đường truyền kết nối tới Google AI bị gián đoạn (Failed to fetch). Vui lòng kiểm tra lại kết nối mạng hoặc bấm "Thử lại ngay".';
   }
 
   return text;
@@ -97,11 +95,12 @@ export async function resolveGeminiApiKey(customKey?: string): Promise<string> {
 }
 
 /**
- * Gọi Google Gemini trực tiếp từ trình duyệt qua SDK chính thức @google/genai
- * - Bỏ qua hoàn toàn giới hạn 10s của Vercel Serverless (Không còn lỗi FUNCTION_INVOCATION_TIMEOUT 504)
+ * Gọi TRỰC TIẾP Google Gemini REST API từ trình duyệt
+ * - ĐÂY LÀ CƠ CHẾ NGUYÊN BẢN CỦA GOOGLE AI STUDIO
+ * - Không đi qua hàm Vercel Serverless Function trung gian -> HOÀN TOÀN KHÔNG BỊ TREO HAY TIMEOUT
  * - Tự động thử lại (Retry loop) khi Google gặp quá tải 503 tạm thời
  */
-export async function callGeminiClientSdk(
+export async function callGeminiDirectRest(
   apiKey: string,
   params: ReviewRequestParams,
   onStatusUpdate?: (status: string) => void
@@ -109,128 +108,108 @@ export async function callGeminiClientSdk(
   const { prompt, mediaFiles = [], model = 'gemini-3.8-flash' } = params;
   const targetModel = model?.trim() || 'gemini-3.8-flash';
 
-  const ai = new GoogleGenAI({ apiKey });
-
-  const contentsParts: any[] = [];
+  const parts: any[] = [];
+  // Chuẩn định dạng REST Google AI: inline_data với snake_case
   for (const m of mediaFiles) {
     if (m.base64 && m.mimeType) {
-      contentsParts.push({
-        inlineData: {
-          mimeType: m.mimeType,
+      parts.push({
+        inline_data: {
+          mime_type: m.mimeType,
           data: m.base64,
         },
       });
     }
   }
-  contentsParts.push({ text: prompt });
+  parts.push({ text: prompt });
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${apiKey.trim()}`;
+  const requestBody = {
+    contents: [
+      {
+        parts,
+      },
+    ],
+    generationConfig: {
+      response_mime_type: 'application/json',
+      temperature: 0.1,
+    },
+  };
 
   const maxRetries = 3;
-  let lastError: any = null;
+  let lastErrorText = '';
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       if (onStatusUpdate) {
         onStatusUpdate(
           attempt === 1
-            ? `BLUEMARQ AI Engine (${targetModel}) đang rà soát hợp đồng... (Thời gian ước tính 15 - 30 giây)`
-            : `Google AI đang bận (503). Tự động thử lại lần ${attempt}/${maxRetries}...`
+            ? `BLUEMARQ AI (${targetModel}) đang phân tích hợp đồng... (Quá trình mất 15-25 giây)`
+            : `Google AI đang bận (503). Đang tự động thử lại lần ${attempt}/${maxRetries}...`
         );
       }
 
-      const response = await ai.models.generateContent({
-        model: targetModel,
-        contents: contentsParts,
-        config: {
-          responseMimeType: 'application/json',
-          temperature: 0.1,
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify(requestBody),
       });
 
-      const responseText = response.text || '[]';
-      const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-      let findings = [];
-      try {
-        findings = JSON.parse(cleanJson);
-      } catch {
-        const match = cleanJson.match(/\[[\s\S]*\]/);
-        if (match) findings = JSON.parse(match[0]);
-        else throw new Error('AI không trả về đúng định dạng danh sách lỗi.');
+      const data = await res.json();
+
+      if (res.ok) {
+        const candidateText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
+        const cleanJson = candidateText.replace(/```json/g, '').replace(/```/g, '').trim();
+        let findings = [];
+        try {
+          findings = JSON.parse(cleanJson);
+        } catch {
+          const match = cleanJson.match(/\[[\s\S]*\]/);
+          if (match) findings = JSON.parse(match[0]);
+          else throw new Error('AI không trả về đúng định dạng danh sách lỗi.');
+        }
+        return Array.isArray(findings) ? findings : [];
       }
 
-      return Array.isArray(findings) ? findings : [];
-    } catch (err: any) {
-      lastError = err;
-      const rawErr = String(err?.message || err || '');
-      const isOverload =
+      const rawErr = data?.error?.message || JSON.stringify(data?.error || data);
+      lastErrorText = rawErr;
+
+      const isOverloaded =
+        res.status === 503 ||
+        res.status === 429 ||
         rawErr.includes('503') ||
         rawErr.includes('high demand') ||
         rawErr.includes('UNAVAILABLE') ||
-        rawErr.includes('429');
+        rawErr.includes('RESOURCE_EXHAUSTED');
 
-      if (isOverload && attempt < maxRetries) {
+      if (isOverloaded && attempt < maxRetries) {
         const delayMs = attempt * 2500;
         if (onStatusUpdate) {
-          onStatusUpdate(`Máy chủ Google AI đang bận (503). Chờ ${delayMs / 1000}s để tự động thử lại...`);
+          onStatusUpdate(`Google AI đang bận (503/429). Đang tự động thử lại sau ${delayMs / 1000}s...`);
         }
         await wait(delayMs);
         continue;
       }
-      throw err;
-    }
-  }
 
-  throw lastError;
-}
-
-/**
- * Gọi máy chủ backend /api/review (Vercel/Render)
- */
-export async function callBackendReview(
-  params: ReviewRequestParams,
-  onStatusUpdate?: (status: string) => void
-): Promise<any[]> {
-  const maxRetries = 2;
-  let lastErrorText = '';
-
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      if (onStatusUpdate) {
-        onStatusUpdate(`Đang kết nối qua máy chủ xử lý (${params.model || 'gemini-3.8-flash'})...`);
-      }
-
-      const res = await fetch('/api/review', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(params),
-      });
-
-      const rawText = await res.text();
-      let data: any = null;
-      try {
-        data = JSON.parse(rawText);
-      } catch {
-        if (res.status === 504 || rawText.includes('FUNCTION_INVOCATION_TIMEOUT')) {
-          throw new Error('504: FUNCTION_INVOCATION_TIMEOUT');
-        }
-        throw new Error(`Lỗi phản hồi máy chủ (${res.status}): ${rawText.slice(0, 120)}`);
-      }
-
-      if (res.ok) {
-        return data.findings || [];
-      }
-
-      const err = data?.error || `Lỗi máy chủ (${res.status})`;
-      lastErrorText = typeof err === 'string' ? err : JSON.stringify(err);
-      throw new Error(formatGeminiErrorMessage(lastErrorText));
+      throw new Error(formatGeminiErrorMessage(rawErr));
     } catch (err: any) {
       lastErrorText = err?.message || String(err);
-      if (lastErrorText.includes('504') || lastErrorText.includes('FUNCTION_INVOCATION_TIMEOUT')) {
-        throw new Error(formatGeminiErrorMessage(lastErrorText));
+      const isOverloaded =
+        lastErrorText.includes('503') ||
+        lastErrorText.includes('high demand') ||
+        lastErrorText.includes('UNAVAILABLE');
+
+      if (isOverloaded && attempt < maxRetries) {
+        const delayMs = attempt * 2500;
+        if (onStatusUpdate) {
+          onStatusUpdate(`Google AI đang bận (503). Đang tự động thử lại sau ${delayMs / 1000}s...`);
+        }
+        await wait(delayMs);
+        continue;
       }
-      if (attempt === maxRetries) {
-        throw new Error(formatGeminiErrorMessage(lastErrorText));
-      }
-      await wait(2000);
+
+      throw new Error(formatGeminiErrorMessage(lastErrorText));
     }
   }
 
@@ -239,31 +218,21 @@ export async function callBackendReview(
 
 /**
  * Thực hiện gọi Soát xét Hợp đồng thông minh
- * 1. Tự động lấy API key (từ cấu hình Vercel qua /api/key hoặc từ cài đặt người dùng)
- * 2. Gọi trực tiếp bằng SDK chính thức @google/genai -> Không bị giới hạn Timeout 10s của Vercel
- * 3. Nếu không có key hoặc xảy ra lỗi môi trường, tự động chuyển hướng qua /api/review
+ * - Tự động lấy key hệ thống từ Vercel qua /api/key (hoặc từ người dùng)
+ * - Gọi trực tiếp Google AI như cơ chế Google AI Studio
+ * - Hoàn toàn không qua Vercel Serverless Function -> Không bao giờ bị treo quay vòng tròn
  */
 export async function executeContractReview(
   params: ReviewRequestParams,
   onStatusUpdate?: (status: string) => void
 ): Promise<any[]> {
-  // 1. Phân giải API Key
+  // 1. Lấy API key
   const key = await resolveGeminiApiKey(params.apiKey);
 
-  // 2. Chạy qua Client SDK nếu có key (Giải pháp tối ưu nhất cho tài liệu dài)
-  if (key) {
-    try {
-      return await callGeminiClientSdk(key, params, onStatusUpdate);
-    } catch (sdkErr: any) {
-      console.warn('Gọi qua client SDK gặp lỗi, chuyển sang thử kênh máy chủ...', sdkErr);
-      const errMsg = String(sdkErr?.message || sdkErr || '');
-      if (errMsg.includes('503') || errMsg.includes('high demand') || errMsg.includes('UNAVAILABLE')) {
-        throw new Error(formatGeminiErrorMessage(errMsg));
-      }
-      // Tiếp tục fallback sang backend nếu lỗi khác
-    }
+  if (!key) {
+    throw new Error('Chưa cấu hình GEMINI_API_KEY. Vui lòng bấm vào biểu tượng Cài đặt ở góc trên bên phải để dán API Key.');
   }
 
-  // 3. Fallback sang /api/review máy chủ
-  return await callBackendReview(params, onStatusUpdate);
+  // 2. Gọi trực tiếp Google AI REST Endpoint từ trình duyệt (như Google AI Studio)
+  return await callGeminiDirectRest(key, params, onStatusUpdate);
 }
