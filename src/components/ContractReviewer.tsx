@@ -132,11 +132,19 @@ export function ContractReviewer() {
   const [toTrinhFile, setToTrinhFile] = useState<File | null>(null);
   const [toTrinhDoc, setToTrinhDoc] = useState<ProcessedDoc | null>(null);
 
-  const [dkkdFile, setDkkdFile] = useState<File | null>(null);
-  const [dkkdDoc, setDkkdDoc] = useState<ProcessedDoc | null>(null);
+  // Bên Giao thầu (Bên A)
+  const [dkkdGiaoThauFile, setDkkdGiaoThauFile] = useState<File | null>(null);
+  const [dkkdGiaoThauDoc, setDkkdGiaoThauDoc] = useState<ProcessedDoc | null>(null);
 
-  const [uyQuyenFile, setUyQuyenFile] = useState<File | null>(null);
-  const [uyQuyenDoc, setUyQuyenDoc] = useState<ProcessedDoc | null>(null);
+  const [uyQuyenGiaoThauFile, setUyQuyenGiaoThauFile] = useState<File | null>(null);
+  const [uyQuyenGiaoThauDoc, setUyQuyenGiaoThauDoc] = useState<ProcessedDoc | null>(null);
+
+  // Bên Nhận thầu (Bên B)
+  const [dkkdNhanThauFile, setDkkdNhanThauFile] = useState<File | null>(null);
+  const [dkkdNhanThauDoc, setDkkdNhanThauDoc] = useState<ProcessedDoc | null>(null);
+
+  const [uyQuyenNhanThauFile, setUyQuyenNhanThauFile] = useState<File | null>(null);
+  const [uyQuyenNhanThauDoc, setUyQuyenNhanThauDoc] = useState<ProcessedDoc | null>(null);
 
   const [boqFile, setBoqFile] = useState<File | null>(null);
   const [boqDoc, setBoqDoc] = useState<ProcessedDoc | null>(null);
@@ -183,8 +191,10 @@ export function ContractReviewer() {
     try {
       const processed = await processFile(file);
       if (type === 'totrinh') { setToTrinhFile(file); setToTrinhDoc(processed); }
-      else if (type === 'dkkd') { setDkkdFile(file); setDkkdDoc(processed); }
-      else if (type === 'uyquyen') { setUyQuyenFile(file); setUyQuyenDoc(processed); }
+      else if (type === 'dkkd_giaothau') { setDkkdGiaoThauFile(file); setDkkdGiaoThauDoc(processed); }
+      else if (type === 'dkkd_nhanthau') { setDkkdNhanThauFile(file); setDkkdNhanThauDoc(processed); }
+      else if (type === 'uyquyen_giaothau') { setUyQuyenGiaoThauFile(file); setUyQuyenGiaoThauDoc(processed); }
+      else if (type === 'uyquyen_nhanthau') { setUyQuyenNhanThauFile(file); setUyQuyenNhanThauDoc(processed); }
       else if (type === 'boq') { setBoqFile(file); setBoqDoc(processed); }
       else if (type === 'hopdong') { setHopDongFile(file); setHopDongDoc(processed); }
     } catch (e: any) {
@@ -259,20 +269,39 @@ export function ContractReviewer() {
       };
 
       checkAndPushMedia(toTrinhDoc, 'Tờ trình chủ trương');
-      checkAndPushMedia(dkkdDoc, 'Giấy phép ĐKKD');
-      checkAndPushMedia(uyQuyenDoc, 'Giấy ủy quyền');
+      checkAndPushMedia(dkkdGiaoThauDoc, 'Giấy phép ĐKKD bên Giao thầu');
+      checkAndPushMedia(dkkdNhanThauDoc, 'Giấy phép ĐKKD bên Nhận thầu');
+      checkAndPushMedia(uyQuyenGiaoThauDoc, 'Giấy ủy quyền bên Giao thầu');
+      checkAndPushMedia(uyQuyenNhanThauDoc, 'Giấy ủy quyền bên Nhận thầu');
 
-      // BƯỚC 3: Xây dựng Prompt đối chiếu 5 tầng
-      setLoadingStep('Đang xây dựng ma trận đối chiếu pháp lý & thương mại...');
+      // ĐẨY TẤT CẢ TÀI LIỆU BỔ TRỢ (PDF / Ảnh scan) VÀO MEDIAFILES CHO GEMINI ĐỌC
+      extraFiles.forEach((item, idx) => {
+        if (item.doc) {
+          checkAndPushMedia(item.doc, `Tài liệu bổ trợ ${idx + 1} (${item.file?.name || 'Văn bản bổ sung'})`);
+        }
+      });
+
+      // BƯỚC 3: Xây dựng Prompt đối chiếu ma trận kết hợp tài liệu bổ trợ
+      setLoadingStep('Đang tổng hợp dữ liệu Tờ trình, ĐKKD 2 bên, BOQ và các văn bản bổ trợ...');
       const extraDocsSummary = extraFiles
-        .filter(f => f.doc?.textContent)
-        .map((f, i) => `Phụ lục ${i + 1} (${f.file?.name}):\n${f.doc?.textContent}`)
+        .map((f, i) => {
+          const fileName = f.file?.name || `Tài liệu ${i + 1}`;
+          if (f.doc?.textContent && f.doc.textContent.trim()) {
+            return `[Tài liệu bổ trợ ${i + 1} (${fileName})]:\n${f.doc.textContent}`;
+          } else if (f.doc?.base64Data) {
+            return `[Tài liệu bổ trợ ${i + 1} (${fileName}) - Tệp PDF/ảnh scan đính kèm trực tiếp trong payload Gemini Multimodal để rà soát đối chiếu ưu tiên]`;
+          }
+          return null;
+        })
+        .filter(Boolean)
         .join('\n\n');
 
       const prompt = buildContractAuditPrompt({
         toTrinhText: toTrinhDoc?.textContent || (toTrinhDoc?.base64Data ? '[Tài liệu Tờ trình dạng PDF scan đính kèm]' : undefined),
-        dkkdText: dkkdDoc?.textContent || (dkkdDoc?.base64Data ? '[Giấy phép ĐKKD dạng PDF/ảnh scan đính kèm]' : undefined),
-        uyQuyenText: uyQuyenDoc?.textContent || (uyQuyenDoc?.base64Data ? '[Giấy ủy quyền dạng PDF/ảnh scan đính kèm]' : undefined),
+        dkkdGiaoThauText: dkkdGiaoThauDoc?.textContent || (dkkdGiaoThauDoc?.base64Data ? '[Giấy phép ĐKKD bên Giao thầu dạng PDF/ảnh scan đính kèm]' : undefined),
+        dkkdNhanThauText: dkkdNhanThauDoc?.textContent || (dkkdNhanThauDoc?.base64Data ? '[Giấy phép ĐKKD bên Nhận thầu dạng PDF/ảnh scan đính kèm]' : undefined),
+        uyQuyenGiaoThauText: uyQuyenGiaoThauDoc?.textContent || (uyQuyenGiaoThauDoc?.base64Data ? '[Giấy ủy quyền bên Giao thầu dạng PDF/ảnh scan đính kèm]' : undefined),
+        uyQuyenNhanThauText: uyQuyenNhanThauDoc?.textContent || (uyQuyenNhanThauDoc?.base64Data ? '[Giấy ủy quyền bên Nhận thầu dạng PDF/ảnh scan đính kèm]' : undefined),
         boqText: boqDoc?.textContent,
         extraDocsText: extraDocsSummary || undefined,
         hopDongText: contractText,
@@ -293,7 +322,7 @@ export function ContractReviewer() {
           setLoadingStep(statusMsg);
         }
       );
-      // Khởi tạo trạng thái mặc định: tất cả các lỗi đều được chọn để Track Changes
+      // Khởi tạo trạng thái mặc định: phân loại rõ ràng Track Change vs Chỉ Comment
       const formattedFindings: FindingWithSelection[] = rawFindings.map((f, idx) => ({
         id: f.id || idx + 1,
         issue: f.issue || 'Vấn đề cần sửa đổi',
@@ -302,7 +331,8 @@ export function ContractReviewer() {
         reason: f.reason || 'Đối chiếu với tài liệu căn cứ',
         severity: f.severity === 'high' ? 'high' : f.severity === 'medium' ? 'medium' : 'low',
         category: f.category || 'financial_boq',
-        accepted: true, // Mặc định chấp nhận sửa đổi
+        actionType: f.actionType === 'comment_only' ? 'comment_only' : 'track_change',
+        accepted: true,
       }));
 
       setFindings(formattedFindings);
@@ -321,19 +351,30 @@ export function ContractReviewer() {
     setFindings(findings.map(f => f.id === id ? { ...f, accepted: !f.accepted } : f));
   };
 
+  // Chuyển đổi linh hoạt giữa Track Change trực tiếp và Chỉ chèn Comment
+  const toggleActionType = (id: number) => {
+    if (!findings) return;
+    setFindings(findings.map(f => f.id === id ? {
+      ...f,
+      actionType: f.actionType === 'comment_only' ? 'track_change' : 'comment_only'
+    } : f));
+  };
+
   // Chọn tất cả hoặc bỏ chọn tất cả
   const toggleSelectAll = (select: boolean) => {
     if (!findings) return;
     setFindings(findings.map(f => ({ ...f, accepted: select })));
   };
 
-  // Tải xuống file Word có Track Changes
+  // Tải xuống file Word có Track Changes & Comments
   const handleDownloadDocx = async () => {
     if (!hopDongFile || !findings) return;
     try {
       const outputName = hopDongFile.name.replace(/\.docx$/i, '') + `_Da_Soat_Xet_${reviewerName.replace(/\s+/g, '_')}.docx`;
       const applied = await downloadTrackedDocx(hopDongFile, findings, reviewerName, outputName);
-      alert(`Đã xuất thành công file Word với ${applied} điểm sửa đổi được ghi nhận dưới tên [${reviewerName}]! Mở file trong Word để xem vết gạch đỏ và bóng Comment.`);
+      const trackCount = findings.filter(f => f.accepted && f.actionType !== 'comment_only').length;
+      const commentCount = findings.filter(f => f.accepted && f.actionType === 'comment_only').length;
+      alert(`Đã xuất thành công file Word với ${applied} điểm ghi nhận dưới tên [${reviewerName}]!\n• ${trackCount} nội dung sai lệch được gạch đỏ và sửa trực tiếp\n• ${commentCount} ý kiến đề xuất được gắn bóng Comment bên lề để Người duyệt quyết định.`);
     } catch (err: any) {
       console.error(err);
       alert(`Lỗi khi tạo Track Changes: ${err.message}`);
@@ -346,8 +387,10 @@ export function ContractReviewer() {
 
     const baseDocsList: { title: string; fileName: string; type: string }[] = [];
     if (toTrinhFile) baseDocsList.push({ title: 'Tờ trình chủ trương', fileName: toTrinhFile.name, type: toTrinhDoc?.fileType || 'tài liệu' });
-    if (dkkdFile) baseDocsList.push({ title: 'Giấy phép ĐKKD', fileName: dkkdFile.name, type: dkkdDoc?.fileType || 'pháp lý' });
-    if (uyQuyenFile) baseDocsList.push({ title: 'Giấy ủy quyền', fileName: uyQuyenFile.name, type: uyQuyenDoc?.fileType || 'ủy quyền' });
+    if (dkkdGiaoThauFile) baseDocsList.push({ title: 'ĐKKD bên Giao thầu', fileName: dkkdGiaoThauFile.name, type: dkkdGiaoThauDoc?.fileType || 'pháp lý' });
+    if (dkkdNhanThauFile) baseDocsList.push({ title: 'ĐKKD bên Nhận thầu', fileName: dkkdNhanThauFile.name, type: dkkdNhanThauDoc?.fileType || 'pháp lý' });
+    if (uyQuyenGiaoThauFile) baseDocsList.push({ title: 'Giấy ủy quyền bên Giao thầu', fileName: uyQuyenGiaoThauFile.name, type: uyQuyenGiaoThauDoc?.fileType || 'ủy quyền' });
+    if (uyQuyenNhanThauFile) baseDocsList.push({ title: 'Giấy ủy quyền bên Nhận thầu', fileName: uyQuyenNhanThauFile.name, type: uyQuyenNhanThauDoc?.fileType || 'ủy quyền' });
     if (boqFile) baseDocsList.push({ title: 'Bảng BOQ / Dự toán', fileName: boqFile.name, type: 'Bảng tính Excel' });
     extraFiles.forEach((ef, idx) => {
       if (ef.file) baseDocsList.push({ title: `Tài liệu bổ trợ ${idx + 1}`, fileName: ef.file.name, type: 'phụ lục' });
@@ -509,24 +552,46 @@ export function ContractReviewer() {
                   />
                   
                   <CompactUploadRow
-                    title="Giấy phép ĐKKD các bên"
-                    icon={<Building className="w-4 h-4" />}
-                    description="Tên pháp nhân, mã số thuế, địa chỉ trụ sở, người đại diện."
-                    file={dkkdFile}
-                    processedDoc={dkkdDoc}
-                    onFileSelect={(f) => handleFileSelect(f, 'dkkd')}
-                    onRemove={() => { setDkkdFile(null); setDkkdDoc(null); }}
+                    title="Giấy phép ĐKKD bên Giao thầu"
+                    icon={<Building className="w-4 h-4 text-blue-400" />}
+                    description="Tên pháp nhân, mã số thuế, địa chỉ trụ sở, người đại diện (Bên A)."
+                    file={dkkdGiaoThauFile}
+                    processedDoc={dkkdGiaoThauDoc}
+                    onFileSelect={(f) => handleFileSelect(f, 'dkkd_giaothau')}
+                    onRemove={() => { setDkkdGiaoThauFile(null); setDkkdGiaoThauDoc(null); }}
                     accept=".pdf,.jpg,.jpeg,.png,.docx"
                   />
 
                   <CompactUploadRow
-                    title="Giấy ủy quyền đại diện ký kết"
-                    icon={<Stamp className="w-4 h-4" />}
-                    description="Số văn bản, phạm vi ủy quyền, hạn mức và thời hạn hiệu lực."
-                    file={uyQuyenFile}
-                    processedDoc={uyQuyenDoc}
-                    onFileSelect={(f) => handleFileSelect(f, 'uyquyen')}
-                    onRemove={() => { setUyQuyenFile(null); setUyQuyenDoc(null); }}
+                    title="Giấy phép ĐKKD bên Nhận thầu"
+                    icon={<Building className="w-4 h-4 text-emerald-400" />}
+                    description="Tên pháp nhân, mã số thuế, địa chỉ trụ sở, người đại diện (Bên B)."
+                    file={dkkdNhanThauFile}
+                    processedDoc={dkkdNhanThauDoc}
+                    onFileSelect={(f) => handleFileSelect(f, 'dkkd_nhanthau')}
+                    onRemove={() => { setDkkdNhanThauFile(null); setDkkdNhanThauDoc(null); }}
+                    accept=".pdf,.jpg,.jpeg,.png,.docx"
+                  />
+
+                  <CompactUploadRow
+                    title="Giấy ủy quyền bên Giao thầu"
+                    icon={<Stamp className="w-4 h-4 text-blue-400" />}
+                    description="Số văn bản, phạm vi ủy quyền, hạn mức và thời hạn hiệu lực (Bên A)."
+                    file={uyQuyenGiaoThauFile}
+                    processedDoc={uyQuyenGiaoThauDoc}
+                    onFileSelect={(f) => handleFileSelect(f, 'uyquyen_giaothau')}
+                    onRemove={() => { setUyQuyenGiaoThauFile(null); setUyQuyenGiaoThauDoc(null); }}
+                    accept=".pdf,.jpg,.jpeg,.png,.docx"
+                  />
+
+                  <CompactUploadRow
+                    title="Giấy ủy quyền bên Nhận thầu"
+                    icon={<Stamp className="w-4 h-4 text-emerald-400" />}
+                    description="Số văn bản, phạm vi ủy quyền, hạn mức và thời hạn hiệu lực (Bên B)."
+                    file={uyQuyenNhanThauFile}
+                    processedDoc={uyQuyenNhanThauDoc}
+                    onFileSelect={(f) => handleFileSelect(f, 'uyquyen_nhanthau')}
+                    onRemove={() => { setUyQuyenNhanThauFile(null); setUyQuyenNhanThauDoc(null); }}
                     accept=".pdf,.jpg,.jpeg,.png,.docx"
                   />
 
@@ -546,7 +611,7 @@ export function ContractReviewer() {
                       key={item.id}
                       title={`Tài liệu bổ trợ ${index + 1}`}
                       icon={<File className="w-4 h-4" />}
-                      description="Phụ lục kỹ thuật, quy định thưởng phạt hoặc bảo hành riêng."
+                      description="Văn bản xin điều chỉnh, phụ lục kỹ thuật hoặc thỏa thuận bổ sung."
                       file={item.file}
                       processedDoc={item.doc}
                       onFileSelect={(f) => updateExtraFile(item.id, f)}
@@ -568,10 +633,8 @@ export function ContractReviewer() {
                 </div>
               </div>
 
-              {/* CARD 2: BẢN THẢO HỢP ĐỒNG CẦN SOÁT XÉT */}
-              <div className="bg-[#0B1A2D]/70 rounded-xl border border-[#C5A059]/50 p-3 sm:p-4 relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-1.5 h-full bg-[#C5A059]"></div>
-                
+              {/* CARD 2: BẢN THẢO HỢP ĐỒNG CẦN SOÁT XÉT (ĐỒNG NHẤT VIỀN VỚI MỤC 1) */}
+              <div className="bg-[#0B1A2D]/70 rounded-xl border border-[#1E3A5F] p-3 sm:p-4">
                 <div className="flex items-center justify-between mb-1">
                   <h3 className="text-xs font-bold text-slate-100 uppercase tracking-wider flex items-center gap-1.5">
                     <Scale className="w-3.5 h-3.5 text-[#C5A059]" />
@@ -672,12 +735,15 @@ export function ContractReviewer() {
               </div>
 
               {findings && (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs bg-red-950/60 text-red-400 border border-red-800/60 px-2.5 py-0.5 rounded-full font-bold">
-                    {findings.length} Sai lệch
+                    {findings.length} Phát hiện
                   </span>
                   <span className="text-xs bg-emerald-950/60 text-emerald-400 border border-emerald-800/60 px-2.5 py-0.5 rounded-full font-bold">
-                    {acceptedCount} Đã chọn Track Change
+                    {findings.filter(f => f.accepted && f.actionType !== 'comment_only').length} Track Change
+                  </span>
+                  <span className="text-xs bg-amber-950/60 text-amber-300 border border-amber-800/60 px-2.5 py-0.5 rounded-full font-bold">
+                    {findings.filter(f => f.accepted && f.actionType === 'comment_only').length} Chỉ Comment
                   </span>
                 </div>
               )}
@@ -782,11 +848,11 @@ export function ContractReviewer() {
                           >
                             {/* Header Card Lỗi */}
                             <div className="px-3.5 py-2.5 bg-[#13253F] border-b border-[#1E3A5F] flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                              <div className="flex items-center gap-2.5">
+                              <div className="flex items-center gap-2.5 flex-1 min-w-0">
                                 <button
                                   onClick={() => toggleFindingAccepted(item.id)}
                                   className="text-slate-400 hover:text-[#C5A059] transition-colors shrink-0"
-                                  title={item.accepted ? "Nhấn để bỏ qua thay đổi này" : "Nhấn để áp dụng Track Change"}
+                                  title={item.accepted ? "Nhấn để bỏ qua phát hiện này" : "Nhấn để áp dụng"}
                                 >
                                   {item.accepted ? (
                                     <CheckSquare className="w-4 h-4 text-[#C5A059]" />
@@ -795,11 +861,31 @@ export function ContractReviewer() {
                                   )}
                                 </button>
 
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
                                   <span className={cn("px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border", riskBadgeClass)}>
                                     {isHigh ? 'Nghiêm trọng' : isMed ? 'Cần lưu ý' : 'Lỗi nhỏ'}
                                   </span>
-                                  <h3 className="font-bold text-slate-100 text-xs">
+
+                                  {item.actionType === 'comment_only' ? (
+                                    <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-amber-950/80 text-amber-300 border border-amber-700/60 inline-flex items-center gap-1">
+                                      💬 Ý kiến tư vấn (Chỉ chèn Comment)
+                                    </span>
+                                  ) : (
+                                    <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-emerald-950/80 text-emerald-300 border border-emerald-700/60 inline-flex items-center gap-1">
+                                      ✍️ Sai lệch căn cứ (Gạch sửa trực tiếp)
+                                    </span>
+                                  )}
+
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleActionType(item.id)}
+                                    className="text-[10px] text-slate-400 hover:text-[#C5A059] underline font-medium"
+                                    title="Nhấn để đổi cách xử lý trong file Word"
+                                  >
+                                    [{item.actionType === 'comment_only' ? 'Chuyển sang Track Change' : 'Chuyển sang Chỉ Comment'}]
+                                  </button>
+
+                                  <h3 className="font-bold text-slate-100 text-xs w-full sm:w-auto mt-0.5 sm:mt-0 truncate">
                                     {item.issue}
                                   </h3>
                                 </div>
@@ -807,7 +893,7 @@ export function ContractReviewer() {
 
                               <button
                                 onClick={() => setDiffModalItem(item)}
-                                className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-[#C5A059] px-2 py-0.5 rounded bg-[#0B1A2D] border border-[#1E3A5F] self-start sm:self-auto"
+                                className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-[#C5A059] px-2 py-0.5 rounded bg-[#0B1A2D] border border-[#1E3A5F] self-start sm:self-auto shrink-0"
                               >
                                 <Eye className="w-3 h-3" />
                                 So sánh
@@ -823,33 +909,63 @@ export function ContractReviewer() {
                             </div>
 
                             {/* So sánh Đoạn gốc vs Đề xuất sửa */}
-                            <div className="p-3 flex flex-col sm:flex-row gap-3 bg-[#0B1A2D]/40 text-xs">
-                              <div className="flex-1 space-y-1">
-                                <div className="text-[9px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1">
-                                  <FileText className="w-3 h-3 text-red-400" /> Bản thảo gốc (Được thay thế)
+                            {item.actionType === 'comment_only' ? (
+                              <div className="p-3 flex flex-col sm:flex-row gap-3 bg-[#0B1A2D]/40 text-xs">
+                                <div className="flex-1 space-y-1">
+                                  <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                                    <FileText className="w-3 h-3 text-slate-400" /> Đoạn hợp đồng gốc liên quan (Giữ nguyên trong file Word)
+                                  </div>
+                                  <div className="p-2.5 bg-slate-900/40 rounded-lg border border-slate-700/40">
+                                    <p className="text-slate-300 font-serif text-[11px] leading-relaxed whitespace-pre-wrap">
+                                      {item.original}
+                                    </p>
+                                  </div>
                                 </div>
-                                <div className="p-2.5 bg-red-950/20 rounded-lg border border-red-900/30">
-                                  <p className="text-red-400/90 font-serif text-[11px] leading-relaxed line-through decoration-red-500/50 italic whitespace-pre-wrap">
-                                    {item.original}
-                                  </p>
-                                </div>
-                              </div>
 
-                              <div className="hidden sm:flex flex-col items-center justify-center text-slate-600">
-                                <ArrowRight className="w-3.5 h-3.5" />
-                              </div>
+                                <div className="hidden sm:flex flex-col items-center justify-center text-slate-600">
+                                  <ArrowRight className="w-3.5 h-3.5" />
+                                </div>
 
-                              <div className="flex-1 space-y-1">
-                                <div className="text-[9px] font-bold text-[#C5A059] uppercase tracking-widest flex items-center gap-1">
-                                  <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Đề xuất viết lại (Track Changes)
-                                </div>
-                                <div className="p-2.5 bg-emerald-950/30 rounded-lg border border-emerald-900/50">
-                                  <p className="text-emerald-300 font-serif text-[11px] leading-relaxed font-semibold whitespace-pre-wrap">
-                                    {item.suggestion}
-                                  </p>
+                                <div className="flex-1 space-y-1">
+                                  <div className="text-[9px] font-bold text-amber-400 uppercase tracking-widest flex items-center gap-1">
+                                    <Info className="w-3 h-3 text-amber-400" /> Ý kiến kiến nghị / Đề xuất (Chỉ chèn bóng Comment bên lề)
+                                  </div>
+                                  <div className="p-2.5 bg-amber-950/20 rounded-lg border border-amber-900/40">
+                                    <p className="text-amber-200 font-serif text-[11px] leading-relaxed whitespace-pre-wrap">
+                                      {item.suggestion}
+                                    </p>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
+                            ) : (
+                              <div className="p-3 flex flex-col sm:flex-row gap-3 bg-[#0B1A2D]/40 text-xs">
+                                <div className="flex-1 space-y-1">
+                                  <div className="text-[9px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1">
+                                    <FileText className="w-3 h-3 text-red-400" /> Bản thảo gốc (Sẽ gạch đỏ xóa bỏ)
+                                  </div>
+                                  <div className="p-2.5 bg-red-950/20 rounded-lg border border-red-900/30">
+                                    <p className="text-red-400/90 font-serif text-[11px] leading-relaxed line-through decoration-red-500/50 italic whitespace-pre-wrap">
+                                      {item.original}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="hidden sm:flex flex-col items-center justify-center text-slate-600">
+                                  <ArrowRight className="w-3.5 h-3.5" />
+                                </div>
+
+                                <div className="flex-1 space-y-1">
+                                  <div className="text-[9px] font-bold text-emerald-400 uppercase tracking-widest flex items-center gap-1">
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Nội dung chuẩn thay thế (Sẽ chèn chữ mới)
+                                  </div>
+                                  <div className="p-2.5 bg-emerald-950/30 rounded-lg border border-emerald-900/50">
+                                    <p className="text-emerald-300 font-serif text-[11px] leading-relaxed font-semibold whitespace-pre-wrap">
+                                      {item.suggestion}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         );
                       })}
@@ -910,7 +1026,7 @@ export function ContractReviewer() {
                     )}
                   >
                     <DownloadCloud className="w-3.5 h-3.5" />
-                    <span>Xuất Word ({acceptedCount} Track Changes)</span>
+                    <span>Xuất File Word ({findings ? findings.filter(f => f.accepted && f.actionType !== 'comment_only').length : 0} Sửa + {findings ? findings.filter(f => f.accepted && f.actionType === 'comment_only').length : 0} Comment)</span>
                   </button>
                 </div>
               </div>

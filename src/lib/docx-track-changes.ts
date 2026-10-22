@@ -8,6 +8,8 @@ export interface FindingToApply {
   suggestion: string;
   reason: string;
   severity: 'high' | 'medium' | 'low';
+  category?: 'legal_authority' | 'financial_boq' | 'submission_mismatch' | 'format_compliance';
+  actionType?: 'track_change' | 'comment_only';
   accepted?: boolean;
 }
 
@@ -33,20 +35,23 @@ function getInitials(name: string): string {
 
 /**
  * Áp dụng Track Changes và Comments vào file Word (.docx) theo chuẩn OpenXML ECMA-376
+ * - Phân định rõ:
+ *   + track_change (Nội dung tiên quyết sai căn cứ): Gạch đỏ chữ cũ, chèn chữ mới, kèm bóng comment giải trình.
+ *   + comment_only (Nội dung đề xuất / cân nhắc): Giữ nguyên văn bản gốc 100%, CHỈ gắn bóng comment bên lề để người duyệt quyết định.
  */
 export async function applyTrackChangesToDocx(
   originalDocxFile: File,
   findings: FindingToApply[],
   reviewerName: string = 'Ban Pháp Chế'
 ): Promise<{ successCount: number; blob: Blob }> {
-  const author = reviewerName.trim() || 'Ban Pháp Chế AI';
+  const author = reviewerName.trim() || 'Ban Pháp Chế';
   const initials = getInitials(author);
   const dateStr = new Date().toISOString();
 
-  // Chỉ lấy những finding được người dùng chấp nhận (hoặc mặc định lấy hết nếu không có cờ accepted)
-  const activeFindings = findings.filter(f => f.accepted !== false && f.original && f.suggestion);
+  // Chỉ lấy những finding được người dùng chọn (accepted !== false) và có đoạn gốc
+  const activeFindings = findings.filter(f => f.accepted !== false && f.original && f.original.trim());
   if (activeFindings.length === 0) {
-    throw new Error('Không có điều khoản nào được chọn để áp dụng Track Changes.');
+    throw new Error('Không có điều khoản nào được chọn để áp dụng vào văn bản Word.');
   }
 
   const zip = new JSZip();
@@ -64,7 +69,6 @@ export async function applyTrackChangesToDocx(
   let maxCommentId = 1;
 
   if (commentsXml) {
-    // Tìm max comment ID hiện có
     const idMatches = commentsXml.match(/w:id="(\d+)"/g);
     if (idMatches) {
       idMatches.forEach(m => {
@@ -73,7 +77,6 @@ export async function applyTrackChangesToDocx(
       });
     }
   } else {
-    // Tạo cấu trúc comments.xml mới nếu chưa có
     commentsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:comments xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" 
             xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
@@ -91,7 +94,6 @@ export async function applyTrackChangesToDocx(
   // 4. Đảm bảo word/_rels/document.xml.rels có liên kết đến comments.xml
   let relsXml = await loadedZip.file('word/_rels/document.xml.rels')?.async('string');
   if (relsXml && !relsXml.includes('relationships/comments')) {
-    // Tìm ID quan hệ lớn nhất
     let nextRelId = 99;
     const rIdMatches = relsXml.match(/Id="rId(\d+)"/g);
     if (rIdMatches) {
@@ -108,40 +110,22 @@ export async function applyTrackChangesToDocx(
   let successCount = 0;
   let currentChangeId = maxCommentId + 10;
 
-  // 5. Quét và áp dụng từng finding
+  // 5. Quét và áp dụng từng finding theo đúng loại xử lý
   activeFindings.forEach((finding, index) => {
     const commentId = maxCommentId + index + 1;
     const delId = currentChangeId++;
     const insId = currentChangeId++;
 
     const origTrimmed = finding.original.trim();
-    const suggTrimmed = finding.suggestion.trim();
+    const suggTrimmed = (finding.suggestion || '').trim();
     const escapedOrig = escapeXml(origTrimmed);
     const escapedSugg = escapeXml(suggTrimmed);
-    const escapedReason = escapeXml(finding.reason || 'Sai lệch đối chiếu với tài liệu căn cứ.');
+    const escapedReason = escapeXml(finding.reason || '');
 
-    const severityLabel = finding.severity === 'high' 
-      ? 'RỦI RO CAO' 
-      : finding.severity === 'medium' 
-        ? 'CẦN LƯU Ý' 
-        : 'LỖI THỂ THỨC';
+    // Kiểm tra xem đây là sửa đổi trực tiếp (track_change) hay chỉ chèn comment tư vấn (comment_only)
+    const isCommentOnly = finding.actionType === 'comment_only';
 
-    // Tạo khối Track Change + Comment Reference chuẩn OpenXML
-    const trackChangeReplacement = 
-      `<w:commentRangeStart w:id="${commentId}"/>` +
-      `<w:del w:id="${delId}" w:author="${escapeXml(author)}" w:date="${dateStr}">` +
-        `<w:r><w:delText xml:space="preserve">${escapedOrig}</w:delText></w:r>` +
-      `</w:del>` +
-      `<w:ins w:id="${insId}" w:author="${escapeXml(author)}" w:date="${dateStr}">` +
-        `<w:r><w:t xml:space="preserve">${escapedSugg}</w:t></w:r>` +
-      `</w:ins>` +
-      `<w:commentRangeEnd w:id="${commentId}"/>` +
-      `<w:r>` +
-        `<w:rPr><w:rStyle w:val="CommentReference"/></w:rPr>` +
-        `<w:commentReference w:id="${commentId}"/>` +
-      `</w:r>`;
-
-    // Tạo thẻ Comment trong comments.xml
+    // A. Nội dung hiển thị trong Bong bóng Comment
     const commentTag = 
       `<w:comment w:id="${commentId}" w:author="${escapeXml(author)}" w:date="${dateStr}" w:initials="${escapeXml(initials)}">` +
         `<w:p>` +
@@ -151,55 +135,79 @@ export async function applyTrackChangesToDocx(
             `<w:annotationRef/>` +
           `</w:r>` +
           `<w:r>` +
-            `<w:rPr><w:b/><w:color w:val="C5A059"/></w:rPr>` +
-            `<w:t xml:space="preserve">[${severityLabel}] ${escapeXml(finding.issue)}: </w:t>` +
+            `<w:rPr><w:b/><w:color w:val="${isCommentOnly ? 'D97706' : 'DC2626'}"/></w:rPr>` +
+            `<w:t xml:space="preserve">[${isCommentOnly ? 'ĐỀ XUẤT CÂN NHẮC' : 'SAI LỆCH CĂN CỨ'}] ${escapeXml(finding.issue)}: </w:t>` +
           `</w:r>` +
+          (isCommentOnly && suggTrimmed ? (
+            `<w:r>` +
+              `<w:rPr><w:i/></w:rPr>` +
+              `<w:t xml:space="preserve">Đề xuất: "${escapedSugg}". </w:t>` +
+            `</w:r>`
+          ) : '') +
           `<w:r>` +
-            `<w:t xml:space="preserve">${escapedReason}</w:t>` +
+            `<w:t xml:space="preserve">Căn cứ: ${escapedReason}</w:t>` +
           `</w:r>` +
         `</w:p>` +
       `</w:comment>`;
 
+    // B. Chuỗi thay thế trong document.xml
+    let replacementXml = '';
+
+    if (isCommentOnly) {
+      // HÌNH THỨC CHỈ COMMENT: Giữ nguyên 100% văn bản gốc, chỉ gắn CommentRange và CommentReference bên lề
+      replacementXml = 
+        `<w:commentRangeStart w:id="${commentId}"/>` +
+        `<w:r><w:t xml:space="preserve">${escapedOrig}</w:t></w:r>` +
+        `<w:commentRangeEnd w:id="${commentId}"/>` +
+        `<w:r>` +
+          `<w:rPr><w:rStyle w:val="CommentReference"/></w:rPr>` +
+          `<w:commentReference w:id="${commentId}"/>` +
+        `</w:r>`;
+    } else {
+      // HÌNH THỨC TRACK CHANGE: Gạch đỏ chữ cũ (<w:del>) và chèn chữ mới (<w:ins>)
+      replacementXml = 
+        `<w:commentRangeStart w:id="${commentId}"/>` +
+        `<w:del w:id="${delId}" w:author="${escapeXml(author)}" w:date="${dateStr}">` +
+          `<w:r><w:delText xml:space="preserve">${escapedOrig}</w:delText></w:r>` +
+        `</w:del>` +
+        `<w:ins w:id="${insId}" w:author="${escapeXml(author)}" w:date="${dateStr}">` +
+          `<w:r><w:t xml:space="preserve">${escapedSugg}</w:t></w:r>` +
+        `</w:ins>` +
+        `<w:commentRangeEnd w:id="${commentId}"/>` +
+        `<w:r>` +
+          `<w:rPr><w:rStyle w:val="CommentReference"/></w:rPr>` +
+          `<w:commentReference w:id="${commentId}"/>` +
+        `</w:r>`;
+    }
+
     let replaced = false;
 
-    // CHIẾN THUẬT 1: Tìm exact trong thẻ <w:t>...</w:t>
-    // Xử lý cả trường hợp text có khoảng trắng hoặc ký tự đặc biệt
+    // CHIẾN THUẬT 1: Tìm exact trong XML
     if (documentXml.includes(escapedOrig)) {
-      // Tìm vị trí thẻ <w:r> hoặc <w:t> bao quanh
-      documentXml = documentXml.replace(escapedOrig, trackChangeReplacement);
+      documentXml = documentXml.replace(escapedOrig, replacementXml);
       replaced = true;
     } else if (documentXml.includes(origTrimmed)) {
-      documentXml = documentXml.replace(origTrimmed, trackChangeReplacement);
+      documentXml = documentXml.replace(origTrimmed, replacementXml);
       replaced = true;
     }
 
-    // CHIẾN THUẬT 2: Nếu câu bị ngắt qua nhiều thẻ <w:t> trong một paragraph <w:p>
+    // CHIẾN THUẬT 2: Tìm chính xác trong Paragraph có chứa toàn văn đoạn gốc (loại bỏ hoàn toàn lỗi gán bừa bãi)
     if (!replaced) {
-      // Tìm paragraph chứa các từ khóa quan trọng của original
-      const words = origTrimmed.split(/\s+/).filter(w => w.length > 2);
-      if (words.length >= 2) {
-        // Tìm paragraph có chứa cả từ đầu và từ cuối
-        const firstWord = escapeXml(words[0]);
-        const lastWord = escapeXml(words[words.length - 1]);
-        
-        // Match từng đoạn <w:p>...</w:p>
-        const pRegex = /<w:p\b[^>]*>([\s\S]*?)<\/w:p>/g;
-        let match: RegExpExecArray | null;
+      const pRegex = /<w:p\b[^>]*>([\s\S]*?)<\/w:p>/g;
+      let match: RegExpExecArray | null;
 
-        while ((match = pRegex.exec(documentXml)) !== null) {
-          const pContent = match[0];
-          // Trích xuất toàn bộ text của đoạn này
-          const plainText = pContent.replace(/<[^>]+>/g, '');
-          
-          if (plainText.includes(origTrimmed) || (pContent.includes(firstWord) && pContent.includes(lastWord))) {
-            // Thay thế bằng cách chèn Track Change vào vị trí thích hợp trong Paragraph
-            // Chèn sau thẻ <w:pPr>...</w:pPr> nếu có
-            let updatedP = pContent;
-            if (updatedP.includes('</w:pPr>')) {
-              updatedP = updatedP.replace('</w:pPr>', `</w:pPr>${trackChangeReplacement}`);
-            } else {
-              updatedP = updatedP.replace(/<w:p\b[^>]*>/, `$&${trackChangeReplacement}`);
-            }
+      while ((match = pRegex.exec(documentXml)) !== null) {
+        const pContent = match[0];
+        const plainText = pContent.replace(/<[^>]+>/g, '');
+
+        // BẮT BUỘC plainText của Paragraph phải chứa trọn vẹn origTrimmed
+        if (plainText.includes(origTrimmed)) {
+          // Gắn comment vào cuối đoạn văn bản này để người duyệt theo dõi
+          if (pContent.includes('</w:p>')) {
+            const safeAttachment = isCommentOnly
+              ? `<w:commentRangeStart w:id="${commentId}"/><w:commentRangeEnd w:id="${commentId}"/><w:r><w:rPr><w:rStyle w:val="CommentReference"/></w:rPr><w:commentReference w:id="${commentId}"/></w:r></w:p>`
+              : `${replacementXml}</w:p>`;
+            const updatedP = pContent.replace('</w:p>', safeAttachment);
             documentXml = documentXml.replace(pContent, updatedP);
             replaced = true;
             break;

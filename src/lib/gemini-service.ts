@@ -32,7 +32,7 @@ export function formatGeminiErrorMessage(rawMsg: any): string {
     } else if (parsed?.error && typeof parsed.error === 'string') {
       text = parsed.error;
     }
-  } catch {}
+  } catch { }
 
   if (
     text.includes('504') ||

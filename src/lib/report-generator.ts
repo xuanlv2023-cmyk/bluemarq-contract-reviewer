@@ -65,9 +65,10 @@ export function generateAuditReportHtml(data: AuditReportData): string {
       <tr>
         <th style="width: 5%;">STT</th>
         <th style="width: 15%;">Vấn đề / Mức độ</th>
-        <th style="width: 30%;">Nguyên văn Bản thảo gốc</th>
-        <th style="width: 30%;">Đề xuất sửa đổi (Track Changes)</th>
-        <th style="width: 20%;">Căn cứ sai lệch</th>
+        <th style="width: 12%;">Hình thức</th>
+        <th style="width: 25%;">Nguyên văn Bản thảo gốc</th>
+        <th style="width: 25%;">Nội dung Sửa đổi / Đề xuất</th>
+        <th style="width: 18%;">Căn cứ tài liệu</th>
       </tr>
     </thead>
     <tbody>
@@ -79,6 +80,11 @@ export function generateAuditReportHtml(data: AuditReportData): string {
             <span class="${f.severity === 'high' ? 'badge-high' : f.severity === 'medium' ? 'badge-medium' : 'badge-low'}">
               [${f.severity === 'high' ? 'NGHIÊM TRỌNG' : f.severity === 'medium' ? 'CẦN LƯU Ý' : 'LỖI THỂ THỨC'}]
             </span>
+          </td>
+          <td>
+            ${f.actionType === 'comment_only' 
+              ? '<span style="color: #b45309; font-weight: bold; font-size: 12px;">💬 Chỉ Comment (Ý kiến tư vấn)</span>' 
+              : '<span style="color: #15803d; font-weight: bold; font-size: 12px;">✍️ Track Change (Sửa trực tiếp)</span>'}
           </td>
           <td class="orig-text">${f.original}</td>
           <td class="sugg-text">${f.suggestion}</td>
