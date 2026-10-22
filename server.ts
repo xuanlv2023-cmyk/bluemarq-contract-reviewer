@@ -32,7 +32,7 @@ async function startServer() {
         prompt,
         mediaFiles,
         apiKey,
-        model = 'gemini-2.5-pro'
+        model = 'gemini-3.8-flash'
       } = req.body;
 
       if (!prompt) {
@@ -68,34 +68,17 @@ async function startServer() {
       // Đính kèm prompt phân tích chi tiết
       contentsParts.push({ text: prompt });
 
-      // Chuỗi candidate models: Ưu tiên Gemini 3.8 Flash -> 2.0 Flash -> 1.5 Pro -> 1.5 Flash
-      const candidateModels = [
-        model || 'gemini-3.8-flash',
-        'gemini-3.8-flash',
-        'gemini-2.0-flash',
-        'gemini-1.5-pro',
-        'gemini-1.5-flash'
-      ];
-      const modelsToTry = Array.from(new Set(candidateModels));
-      let responseText = '';
-      let lastError: any = null;
+      // Model chuẩn: Gemini 3.8 Flash
+      const targetModel = (model && model.trim()) || 'gemini-3.8-flash';
 
-      for (const m of modelsToTry) {
-        try {
-          const response = await ai.models.generateContent({
-            model: m,
-            contents: contentsParts,
-            config: {
-              responseMimeType: 'application/json',
-            }
-          });
-          responseText = response.text || '[]';
-          if (responseText) break;
-        } catch (genError: any) {
-          console.warn(`Model ${m} thất bại: ${genError?.message}. Thử model tiếp theo...`);
-          lastError = genError;
+      const response = await ai.models.generateContent({
+        model: targetModel,
+        contents: contentsParts,
+        config: {
+          responseMimeType: 'application/json',
         }
-      }
+      });
+      const responseText = response.text || '[]';
 
       if (!responseText) {
         throw lastError || new Error('Không thể kết nối tới các model AI của Google.');
@@ -146,7 +129,7 @@ async function startServer() {
   // Tương thích ngược với /api/gemini
   app.post('/api/gemini', async (req, res) => {
     try {
-      const { prompt, apiKey, model = 'gemini-2.5-flash' } = req.body;
+      const { prompt, apiKey, model = 'gemini-3.8-flash' } = req.body;
       const key = apiKey || process.env.GEMINI_API_KEY;
       if (!key) {
         return res.status(400).json({ error: 'Vui lòng cung cấp Gemini API Key' });

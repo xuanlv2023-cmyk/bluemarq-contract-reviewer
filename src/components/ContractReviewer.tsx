@@ -3,7 +3,7 @@ import {
   Scale, FileText, Building, Stamp, CheckCircle2, AlertCircle, 
   Loader2, Search, ArrowRight, XCircle, Info, UploadCloud, X, 
   File, Plus, FileSymlink, FileArchive, FileImage, Settings, Key, Check, DownloadCloud,
-  ClipboardList, Calculator, CheckSquare, Square, Filter, FileSpreadsheet, Eye, Printer, Trash2,
+  Calculator, CheckSquare, Square, Filter, FileSpreadsheet, Eye, Printer, Trash2,
   UserCheck
 } from 'lucide-react';
 import { cn } from '../utils';
@@ -138,9 +138,6 @@ export function ContractReviewer() {
   const [uyQuyenFile, setUyQuyenFile] = useState<File | null>(null);
   const [uyQuyenDoc, setUyQuyenDoc] = useState<ProcessedDoc | null>(null);
 
-  const [bangTongHopFile, setBangTongHopFile] = useState<File | null>(null);
-  const [bangTongHopDoc, setBangTongHopDoc] = useState<ProcessedDoc | null>(null);
-
   const [boqFile, setBoqFile] = useState<File | null>(null);
   const [boqDoc, setBoqDoc] = useState<ProcessedDoc | null>(null);
 
@@ -188,7 +185,6 @@ export function ContractReviewer() {
       if (type === 'totrinh') { setToTrinhFile(file); setToTrinhDoc(processed); }
       else if (type === 'dkkd') { setDkkdFile(file); setDkkdDoc(processed); }
       else if (type === 'uyquyen') { setUyQuyenFile(file); setUyQuyenDoc(processed); }
-      else if (type === 'bangtonghop') { setBangTongHopFile(file); setBangTongHopDoc(processed); }
       else if (type === 'boq') { setBoqFile(file); setBoqDoc(processed); }
       else if (type === 'hopdong') { setHopDongFile(file); setHopDongDoc(processed); }
     } catch (e: any) {
@@ -278,7 +274,6 @@ export function ContractReviewer() {
         dkkdText: dkkdDoc?.textContent || (dkkdDoc?.base64Data ? '[Giấy phép ĐKKD dạng PDF/ảnh scan đính kèm]' : undefined),
         uyQuyenText: uyQuyenDoc?.textContent || (uyQuyenDoc?.base64Data ? '[Giấy ủy quyền dạng PDF/ảnh scan đính kèm]' : undefined),
         boqText: boqDoc?.textContent,
-        bangTongHopText: bangTongHopDoc?.textContent,
         extraDocsText: extraDocsSummary || undefined,
         hopDongText: contractText,
         reviewerName,
@@ -349,7 +344,6 @@ export function ContractReviewer() {
     if (dkkdFile) baseDocsList.push({ title: 'Giấy phép ĐKKD', fileName: dkkdFile.name, type: dkkdDoc?.fileType || 'pháp lý' });
     if (uyQuyenFile) baseDocsList.push({ title: 'Giấy ủy quyền', fileName: uyQuyenFile.name, type: uyQuyenDoc?.fileType || 'ủy quyền' });
     if (boqFile) baseDocsList.push({ title: 'Bảng BOQ / Dự toán', fileName: boqFile.name, type: 'Bảng tính Excel' });
-    if (bangTongHopFile) baseDocsList.push({ title: 'Bảng tổng hợp điều chỉnh', fileName: bangTongHopFile.name, type: 'ý kiến nội bộ' });
     extraFiles.forEach((ef, idx) => {
       if (ef.file) baseDocsList.push({ title: `Tài liệu bổ trợ ${idx + 1}`, fileName: ef.file.name, type: 'phụ lục' });
     });
@@ -410,7 +404,7 @@ export function ContractReviewer() {
               <select 
                 value={selectedModel} 
                 onChange={(e) => setSelectedModel(e.target.value)}
-                className="bg-transparent text-[#C5A059] font-semibold focus:outline-none cursor-pointer max-w-[260px] truncate"
+                className="bg-transparent text-[#C5A059] font-semibold focus:outline-none cursor-pointer max-w-[320px] truncate"
               >
                 {AVAILABLE_MODELS.map((m) => (
                   <option key={m.id} value={m.id} className="bg-[#13253F] text-slate-200">
@@ -452,7 +446,7 @@ export function ContractReviewer() {
                 Hồ Sơ Căn Cứ & Bản Thảo
               </h2>
               <span className="text-[10px] bg-[#0B1A2D] border border-[#1E3A5F] text-[#C5A059] px-2 py-0.5 rounded font-mono">
-                Đối chiếu 5 Tầng
+                Đối chiếu Ma trận
               </span>
             </div>
 
@@ -542,17 +536,6 @@ export function ContractReviewer() {
                     accept=".xlsx,.xls"
                   />
 
-                  <CompactUploadRow
-                    title="Bảng tổng hợp điều chỉnh nội bộ"
-                    icon={<ClipboardList className="w-4 h-4" />}
-                    description="Các điều khoản mà các phòng ban chuyên môn đã chốt sửa."
-                    file={bangTongHopFile}
-                    processedDoc={bangTongHopDoc}
-                    onFileSelect={(f) => handleFileSelect(f, 'bangtonghop')}
-                    onRemove={() => { setBangTongHopFile(null); setBangTongHopDoc(null); }}
-                    accept=".docx,.xlsx,.txt"
-                  />
-
                   {extraFiles.map((item, index) => (
                     <CompactUploadRow
                       key={item.id}
@@ -613,23 +596,21 @@ export function ContractReviewer() {
 
             {/* FOOTER CỐ ĐỊNH Ở ĐÁY CỘT TRÁI: NÚT BẮT ĐẦU SOÁT XÉT LUÔN NẰM TRÊN MÀN HÌNH */}
             <div className="p-3.5 bg-[#0E1F35] border-t border-[#1E3A5F] shrink-0 space-y-2">
-              {/* Tên người soát xét hiển thị ghim cố định */}
-              <div className="flex items-center gap-2 bg-[#13253F] border border-[#1E3A5F] rounded-lg px-2.5 py-1.5 focus-within:border-[#C5A059] transition-colors">
-                <UserCheck className="w-3.5 h-3.5 text-[#C5A059] shrink-0" />
-                <span className="text-[11px] text-slate-400 shrink-0 font-medium">Người soát xét:</span>
-                <input
-                  type="text"
-                  value={reviewerName}
-                  onChange={(e) => setReviewerName(e.target.value)}
-                  placeholder="Nhập tên người soát xét..."
-                  className="w-full bg-transparent border-none text-xs text-[#C5A059] font-semibold focus:outline-none placeholder:text-slate-500"
-                />
-              </div>
-
               {error && (
-                <div className="p-2.5 bg-red-950/50 border border-red-500/50 rounded-lg flex items-start gap-2 shadow-lg text-xs text-red-300">
+                <div className="p-2.5 bg-red-950/60 border border-red-500/50 rounded-lg flex items-start gap-2 shadow-lg text-xs text-red-300">
                   <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-                  <div className="font-medium leading-tight">{error}</div>
+                  <div className="font-medium leading-tight flex-1">
+                    {error}
+                    {error.includes('GEMINI_API_KEY') && (
+                      <button
+                        type="button"
+                        onClick={() => setShowConfigModal(true)}
+                        className="block mt-1.5 text-[#C5A059] hover:text-[#D4AF37] underline font-bold transition-colors"
+                      >
+                        👉 Hoặc bấm vào đây để dán API Key cá nhân dùng ngay
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
 

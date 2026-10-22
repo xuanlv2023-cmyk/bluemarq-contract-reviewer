@@ -43,36 +43,17 @@ export default async function handler(req: any, res: any) {
 
     contentsParts.push({ text: prompt });
 
-    // Chuỗi thử model: Ưu tiên Gemini 3.8 Flash -> Gemini 2.0 Flash -> Gemini 1.5 Pro -> Gemini 1.5 Flash
-    const candidateModels = [
-      model,
-      'gemini-3.8-flash',
-      'gemini-2.0-flash',
-      'gemini-1.5-pro',
-      'gemini-1.5-flash'
-    ];
-    // Lọc trùng
-    const modelsToTry = Array.from(new Set(candidateModels));
+    // Model chuẩn: Gemini 3.8 Flash
+    const targetModel = (model && model.trim()) || 'gemini-3.8-flash';
 
-    let responseText = '';
-    let lastError: any = null;
-
-    for (const m of modelsToTry) {
-      try {
-        const response = await ai.models.generateContent({
-          model: m,
-          contents: contentsParts,
-          config: {
-            responseMimeType: 'application/json',
-          }
-        });
-        responseText = response.text || '[]';
-        if (responseText) break;
-      } catch (err: any) {
-        console.warn(`Model ${m} thất bại: ${err?.message}. Thử model tiếp theo...`);
-        lastError = err;
+    const response = await ai.models.generateContent({
+      model: targetModel,
+      contents: contentsParts,
+      config: {
+        responseMimeType: 'application/json',
       }
-    }
+    });
+    const responseText = response.text || '[]';
 
     if (!responseText) {
       throw lastError || new Error('Không thể kết nối tới các model AI của Google.');

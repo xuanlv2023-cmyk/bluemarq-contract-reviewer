@@ -3,7 +3,6 @@ export interface ReviewInputPayload {
   dkkdText?: string;
   uyQuyenText?: string;
   boqText?: string;
-  bangTongHopText?: string;
   extraDocsText?: string;
   hopDongText: string;
   reviewerName?: string;
@@ -15,7 +14,6 @@ export function buildContractAuditPrompt(payload: ReviewInputPayload): string {
     dkkdText,
     uyQuyenText,
     boqText,
-    bangTongHopText,
     extraDocsText,
     hopDongText
   } = payload;
@@ -36,17 +34,14 @@ ${uyQuyenText || '(Không cung cấp)'}
 [4. BẢNG KHỐI LƯỢNG / DỰ TOÁN BOQ ĐƯỢC DUYỆT]:
 ${boqText || '(Không cung cấp)'}
 
-[5. BẢNG TỔNG HỢP Ý KIẾN / NỘI DUNG ĐIỀU CHỈNH ĐÃ THỐNG NHẤT]:
-${bangTongHopText || '(Không cung cấp)'}
-
-[6. CÁC TÀI LIỆU BỔ TRỢ KHÁC]:
+[5. CÁC TÀI LIỆU BỔ TRỢ KHÁC]:
 ${extraDocsText || '(Không có)'}
 
 ==================== TÀI LIỆU CẦN SOÁT XÉT (BẢN THẢO HỢP ĐỒNG) ====================
 ${hopDongText}
 
-==================== BỘ QUY TẮC RÀ SOÁT MA TRẬN 5 TẦNG ====================
-Bạn phải đối chiếu từng câu, từng số liệu trong Bản thảo Hợp đồng theo 5 tầng kiểm soát sau:
+==================== BỘ QUY TẮC RÀ SOÁT MA TRẬN 4 TẦNG ====================
+Bạn phải đối chiếu từng câu, từng số liệu trong Bản thảo Hợp đồng theo các tầng kiểm soát sau:
 
 1. TẦNG 1 - PHÁP NHÂN & ĐẠI DIỆN (Đối chiếu với ĐKKD & Giấy ủy quyền):
    - So khớp chính xác 100% tên Công ty (từng từ như "Cổ phần", "TNHH", "Tập đoàn"), Mã số doanh nghiệp/Mã số thuế, Địa chỉ trụ sở chính đăng ký.
@@ -57,13 +52,10 @@ Bạn phải đối chiếu từng câu, từng số liệu trong Bản thảo H
    - So khớp tổng tiền của Bảng BOQ với Điều khoản Giá trị hợp đồng.
    - So khớp tỷ lệ Tạm ứng (%), Bảo lãnh thực hiện HĐ (%), Tỷ lệ giữ lại bảo hành (%), Thời hạn thanh toán giữa Hợp đồng với Tờ trình đã duyệt.
 
-3. TẦNG 3 - KHỐI LƯỢNG & KỸ THUẬT (Đối chiếu với BOQ):
+3. TẦNG 3 - KHỐI LƯỢNG & KỸ THUẬT (Đối chiếu với BOQ & Tài liệu kỹ thuật):
    - Chủng loại vật tư, xuất xứ, đơn giá của các hạng mục chính trong hợp đồng có bị thay đổi hoặc sai lệch so với BOQ đã duyệt không?
 
-4. TẦNG 4 - NỘI DUNG THỐNG NHẤT NỘI BỘ (Đối chiếu với Bảng tổng hợp điều chỉnh):
-   - Kiểm tra xem các điều khoản mà các phòng ban đã yêu cầu sửa trong Bảng tổng hợp đã được ban soạn thảo cập nhật đúng vào dự thảo chưa, có điều khoản nào bị bỏ quên không.
-
-5. TẦNG 5 - PHÁP LÝ & THỂ THỨC VĂN BẢN (Theo Luật Thương mại & Nghị định 30/2020/NĐ-CP):
+4. TẦNG 4 - PHÁP LÝ & THỂ THỨC VĂN BẢN (Theo Luật Thương mại & Nghị định 30/2020/NĐ-CP):
    - Mức phạt vi phạm hợp đồng thương mại không được vượt quá 8% giá trị phần nghĩa vụ bị vi phạm (Điều 301 Luật Thương mại).
    - Điều khoản giải quyết tranh chấp (Trọng tài/Tòa án có thẩm quyền), điều khoản bất khả kháng, thể thức ghi ngày tháng năm.
 
