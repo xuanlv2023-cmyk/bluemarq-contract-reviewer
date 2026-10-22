@@ -3,13 +3,15 @@ import {
   Scale, FileText, Building, Stamp, CheckCircle2, AlertCircle, 
   Loader2, Search, ArrowRight, XCircle, Info, UploadCloud, X, 
   File, Plus, FileSymlink, FileArchive, FileImage, Settings, Key, Check, DownloadCloud,
-  ClipboardList, Calculator, CheckSquare, Square, Filter, FileSpreadsheet, Eye, Printer
+  ClipboardList, Calculator, CheckSquare, Square, Filter, FileSpreadsheet, Eye, Printer, Trash2,
+  UserCheck
 } from 'lucide-react';
 import { cn } from '../utils';
 import { processFile, ProcessedDoc } from '../lib/file-extractor';
 import { buildContractAuditPrompt } from '../lib/gemini-prompts';
 import { downloadTrackedDocx, FindingToApply } from '../lib/docx-track-changes';
 import { downloadAuditReport, AuditReportData } from '../lib/report-generator';
+import { executeContractReview, AVAILABLE_MODELS } from '../lib/gemini-service';
 
 interface FindingWithSelection extends FindingToApply {
   category?: 'legal_authority' | 'financial_boq' | 'submission_mismatch' | 'format_compliance';
@@ -32,12 +34,13 @@ interface CompactUploadRowProps {
   processedDoc?: ProcessedDoc | null;
   onFileSelect: (file: File) => void;
   onRemove: () => void;
+  onDeleteRow?: () => void;
   required?: boolean;
   accept?: string;
 }
 
 function CompactUploadRow({ 
-  title, icon, description, file, processedDoc, onFileSelect, onRemove, required, accept 
+  title, icon, description, file, processedDoc, onFileSelect, onRemove, onDeleteRow, required, accept 
 }: CompactUploadRowProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -48,7 +51,7 @@ function CompactUploadRow({
   };
 
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between py-3.5 border-b border-[#1E3A5F]/70 last:border-0 gap-3 hover:bg-[#1A2F4C]/50 transition-colors px-2.5 rounded-lg">
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between py-3.5 border-b border-[#1E3A5F]/70 last:border-0 gap-3 hover:bg-[#1A2F4C]/50 transition-colors px-2.5 rounded-lg group">
       <div className="flex items-start gap-3 flex-1 min-w-0 pr-2">
         <div className="mt-0.5 p-2 bg-[#0B1A2D] rounded-lg text-[#C5A059] shadow-sm border border-[#1E3A5F] shrink-0">
           {icon}
@@ -66,7 +69,7 @@ function CompactUploadRow({
         </div>
       </div>
 
-      <div className="w-full sm:w-auto sm:max-w-[42%] flex-shrink-0 flex items-center justify-start sm:justify-end min-w-0">
+      <div className="w-full sm:w-auto sm:max-w-[46%] flex-shrink-0 flex items-center justify-start sm:justify-end gap-1.5 min-w-0">
         {!file ? (
           <>
             <input 
@@ -84,6 +87,16 @@ function CompactUploadRow({
               <UploadCloud className="w-3.5 h-3.5" />
               <span>Tải tệp lên</span>
             </button>
+            {onDeleteRow && (
+              <button
+                type="button"
+                onClick={onDeleteRow}
+                className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-950/40 rounded-lg transition-colors border border-transparent hover:border-red-900/40"
+                title="Xóa dòng tài liệu này"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
           </>
         ) : (
           <div className="flex items-center gap-2 bg-[#0B1A2D] border border-[#1E3A5F] pl-2.5 pr-1.5 py-1.5 rounded-lg w-full min-w-0">
@@ -97,6 +110,16 @@ function CompactUploadRow({
             >
                <X className="w-3.5 h-3.5" />
             </button>
+            {onDeleteRow && (
+              <button
+                type="button"
+                onClick={onDeleteRow}
+                className="p-1 hover:bg-red-950/40 text-slate-400 hover:text-red-400 rounded-md transition-colors shrink-0"
+                title="Xóa hẳn dòng này"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -139,7 +162,7 @@ export function ContractReviewer() {
 
   // Cấu hình người dùng & Model
   const [reviewerName, setReviewerName] = useState(() => localStorage.getItem('bmq_reviewer_name') || 'Ban Pháp Chế');
-  const [selectedModel, setSelectedModel] = useState<'gemini-2.5-pro' | 'gemini-2.5-flash'>('gemini-2.5-pro');
+  const [selectedModel, setSelectedModel] = useState<string>('gemini-3.8-flash');
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('bmq_gemini_api_key') || '');
   const [showConfigModal, setShowConfigModal] = useState(false);
 
@@ -261,25 +284,15 @@ export function ContractReviewer() {
         reviewerName,
       });
 
-      // BƯỚC 4: Gửi sang Backend gọi Gemini 2.5 Pro
+      // BƯỚC 4: Gửi yêu cầu Soát xét AI tự động qua máy chủ (Zero-Config cho người dùng)
       setLoadingStep(`BLUEMARQ AI Engine (${selectedModel}) đang phân tích toàn diện ma trận hợp đồng...`);
-      const response = await fetch('/api/review', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt,
-          mediaFiles,
-          apiKey: apiKey || undefined,
-          model: selectedModel,
-        }),
+      
+      const rawFindings = await executeContractReview({
+        prompt,
+        mediaFiles,
+        apiKey: apiKey || undefined,
+        model: selectedModel,
       });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Lỗi khi gọi API máy chủ.');
-      }
-
-      const rawFindings: any[] = data.findings || [];
       // Khởi tạo trạng thái mặc định: tất cả các lỗi đều được chọn để Track Changes
       const formattedFindings: FindingWithSelection[] = rawFindings.map((f, idx) => ({
         id: f.id || idx + 1,
@@ -370,22 +383,22 @@ export function ContractReviewer() {
   const acceptedCount = (findings || []).filter(f => f.accepted).length;
 
   return (
-    <div className="min-h-screen bg-[#0B1A2D] text-slate-300 font-sans selection:bg-[#C5A059]/30 selection:text-[#C5A059] pb-16">
+    <div className="h-screen w-full flex flex-col bg-[#0B1A2D] text-slate-300 font-sans selection:bg-[#C5A059]/30 selection:text-[#C5A059] overflow-hidden">
       
       {/* HEADER BLUEMARQ */}
-      <header className="bg-[#13253F] border-b border-[#1E3A5F] sticky top-0 z-30 shadow-lg backdrop-blur-md">
-        <div className="max-w-[1680px] mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-5">
-            <div className="flex flex-col justify-center shrink-0 select-none pt-1">
-              <div className="text-[#C5A059] font-bold text-[28px] leading-none tracking-normal font-serif">
+      <header className="bg-[#13253F] border-b border-[#1E3A5F] z-30 shadow-lg backdrop-blur-md shrink-0">
+        <div className="max-w-[1780px] mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="flex flex-col justify-center shrink-0 select-none pt-0.5">
+              <div className="text-[#C5A059] font-bold text-[24px] sm:text-[28px] leading-none tracking-normal font-serif">
                 BLUEMARQ
               </div>
-              <div className="text-[#C5A059] text-[10px] leading-none tracking-[0.45em] font-medium text-center mt-1 ml-1">
+              <div className="text-[#C5A059] text-[9px] sm:text-[10px] leading-none tracking-[0.45em] font-medium text-center mt-0.5 ml-1">
                 GROUP
               </div>
             </div>
-            <div className="h-7 w-px bg-[#1E3A5F]"></div>
-            <h1 className="font-light text-[13px] text-slate-300 tracking-wide uppercase hidden sm:block">
+            <div className="h-6 w-px bg-[#1E3A5F]"></div>
+            <h1 className="font-light text-[12px] sm:text-[13px] text-slate-300 tracking-wide uppercase hidden sm:block">
               Hệ Thống Pháp Chế AI <span className="font-medium text-[#C5A059] mx-1">|</span> Soát xét Hợp đồng Online
             </h1>
           </div>
@@ -396,26 +409,28 @@ export function ContractReviewer() {
               <span className="text-slate-400">Engine:</span>
               <select 
                 value={selectedModel} 
-                onChange={(e) => setSelectedModel(e.target.value as any)}
-                className="bg-transparent text-[#C5A059] font-semibold focus:outline-none cursor-pointer"
+                onChange={(e) => setSelectedModel(e.target.value)}
+                className="bg-transparent text-[#C5A059] font-semibold focus:outline-none cursor-pointer max-w-[260px] truncate"
               >
-                <option value="gemini-2.5-pro" className="bg-[#13253F] text-slate-200">Gemini 2.5 Pro (Khuyên dùng - Đối chiếu sâu)</option>
-                <option value="gemini-2.5-flash" className="bg-[#13253F] text-slate-200">Gemini 2.5 Flash (Siêu tốc độ)</option>
+                {AVAILABLE_MODELS.map((m) => (
+                  <option key={m.id} value={m.id} className="bg-[#13253F] text-slate-200">
+                    {m.name}
+                  </option>
+                ))}
               </select>
             </div>
 
-            {/* Nút Cài đặt API Key */}
+            {/* Nút Cài đặt ẩn/tùy chọn */}
             <button
               onClick={() => setShowConfigModal(true)}
-              className="flex items-center gap-1.5 border border-[#1E3A5F] bg-[#0B1A2D] hover:border-[#C5A059] text-slate-300 hover:text-[#C5A059] px-3 py-1.5 rounded-lg text-xs font-medium transition-all shadow-sm"
-              title="Cấu hình Gemini API Key"
+              className="p-1.5 text-slate-500 hover:text-[#C5A059] transition-colors rounded-lg hover:bg-[#0B1A2D]"
+              title="Cài đặt hệ thống"
             >
-              <Key className="w-3.5 h-3.5 text-[#C5A059]" />
-              <span className="hidden sm:inline">Khóa API</span>
+              <Settings className="w-3.5 h-3.5" />
             </button>
 
             {/* Trạng thái hệ thống */}
-            <div className="flex items-center gap-1.5 border border-[#1E3A5F] bg-[#0B1A2D] rounded-lg px-3 py-1.5 text-xs text-emerald-400 font-medium shadow-sm">
+            <div className="flex items-center gap-1.5 border border-[#1E3A5F] bg-[#0B1A2D] rounded-lg px-2.5 py-1 text-xs text-emerald-400 font-medium shadow-sm">
               <Check className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Sẵn sàng</span>
             </div>
@@ -423,444 +438,485 @@ export function ContractReviewer() {
         </div>
       </header>
 
-      {/* NỘI DUNG CHÍNH */}
-      <main className="max-w-[1680px] mx-auto px-4 sm:px-6 py-8">
-        <div className="flex flex-col lg:flex-row gap-8">
+      {/* NỘI DUNG CHÍNH (Fixed Viewport Layout on Desktop with Independent Scrollbars) */}
+      <main className="max-w-[1780px] w-full mx-auto px-3 sm:px-6 py-3 flex-1 min-h-0 flex flex-col overflow-hidden">
+        <div className="flex flex-col lg:flex-row gap-4 sm:gap-5 flex-1 min-h-0 h-full">
           
-          {/* ==================== CỘT TRÁI: 40% TÀI LIỆU CĂN CỨ & BẢN THẢO ==================== */}
-          <div className="w-full lg:w-[42%] flex flex-col space-y-6">
+          {/* ==================== CỘT TRÁI: 42% TÀI LIỆU CĂN CỨ & BẢN THẢO ==================== */}
+          <div className="w-full lg:w-[42%] flex flex-col h-full bg-[#13253F] rounded-xl shadow-xl border border-[#1E3A5F] overflow-hidden">
             
-            {/* CARD 1: CĂN CỨ ĐỐI CHIẾU */}
-            <div className="bg-[#13253F] rounded-xl shadow-lg border border-[#1E3A5F] p-5 sm:p-6">
-              <div className="flex items-center justify-between mb-1">
-                <h2 className="text-base sm:text-lg font-bold text-slate-100 flex items-center gap-2">
-                  <Stamp className="w-5 h-5 text-[#C5A059]" />
-                  Hồ Sơ Căn Cứ Đối Chiếu
-                </h2>
-                <span className="text-[11px] bg-[#0B1A2D] border border-[#1E3A5F] text-[#C5A059] px-2 py-0.5 rounded font-mono">
-                  Chuẩn pháp lý
-                </span>
-              </div>
-              <p className="text-xs sm:text-sm text-slate-400 mb-4">
-                Hệ thống AI sẽ dùng các tài liệu này để kiểm tra chéo từng điều khoản trong hợp đồng.
-              </p>
+            {/* Header Cột Trái: Cố định ở đỉnh */}
+            <div className="px-4 sm:px-5 py-3 border-b border-[#1E3A5F] bg-[#13253F] flex items-center justify-between shrink-0">
+              <h2 className="text-xs sm:text-sm font-bold text-slate-100 flex items-center gap-2">
+                <Stamp className="w-4 h-4 text-[#C5A059]" />
+                Hồ Sơ Căn Cứ & Bản Thảo
+              </h2>
+              <span className="text-[10px] bg-[#0B1A2D] border border-[#1E3A5F] text-[#C5A059] px-2 py-0.5 rounded font-mono">
+                Đối chiếu 5 Tầng
+              </span>
+            </div>
+
+            {/* Danh sách tài liệu: Có THANH CUỘN ĐỘC LẬP */}
+            <div className="flex-1 min-h-0 overflow-y-auto p-3.5 sm:p-4 space-y-3.5">
               
-              <div className="flex flex-col space-y-1">
-                <CompactUploadRow
-                  title="Tờ trình chủ trương / phê duyệt"
-                  icon={<FileText className="w-4 h-4" />}
-                  description="Giá trị gói thầu, hình thức thanh toán, bảo lãnh đã được duyệt."
-                  file={toTrinhFile}
-                  processedDoc={toTrinhDoc}
-                  onFileSelect={(f) => handleFileSelect(f, 'totrinh')}
-                  onRemove={() => { setToTrinhFile(null); setToTrinhDoc(null); }}
-                  accept=".pdf,.docx,.doc,.txt"
-                />
+              {/* THÔNG TIN NGƯỜI SOÁT XÉT */}
+              <div className="bg-[#0B1A2D]/80 rounded-xl border border-[#1E3A5F] p-3 sm:p-3.5 shadow-md">
+                <div className="flex items-center justify-between mb-1.5">
+                  <label htmlFor="leftReviewerInput" className="text-xs font-bold text-[#C5A059] uppercase tracking-wider flex items-center gap-1.5">
+                    <UserCheck className="w-3.5 h-3.5 text-[#C5A059]" />
+                    Người thực hiện soát xét
+                  </label>
+                  <span className="text-[10px] bg-[#13253F] border border-[#1E3A5F] text-[#C5A059] px-2 py-0.5 rounded font-mono">
+                    Tác giả Track Changes Word
+                  </span>
+                </div>
+                <div className="relative">
+                  <input
+                    id="leftReviewerInput"
+                    type="text"
+                    value={reviewerName}
+                    onChange={(e) => setReviewerName(e.target.value)}
+                    placeholder="VD: Nguyễn Văn A - Ban Pháp Chế"
+                    className="w-full bg-[#13253F] border border-[#1E3A5F] focus:border-[#C5A059] rounded-lg px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none transition-colors"
+                  />
+                </div>
+                <p className="text-[10.5px] text-slate-400 mt-1.5 leading-tight">
+                  Tên này sẽ tự động hiển thị tại các vết gạch đỏ xóa chữ, chữ chèn mới và bong bóng Comment bên lề file Word.
+                </p>
+              </div>
+
+              {/* CARD 1: CĂN CỨ ĐỐI CHIẾU */}
+              <div className="bg-[#0B1A2D]/70 rounded-xl border border-[#1E3A5F] p-3 sm:p-4">
+                <div className="flex items-center justify-between mb-1">
+                  <h3 className="text-xs font-bold text-[#C5A059] uppercase tracking-wider flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5" /> 1. Tài liệu căn cứ đối chiếu
+                  </h3>
+                  <span className="text-[10px] text-slate-400">Chuẩn pháp lý</span>
+                </div>
+                <p className="text-[11px] text-slate-400 mb-2.5">
+                  Tài liệu dùng làm căn cứ kiểm tra chéo (Tờ trình, ĐKKD, BOQ, Giấy ủy quyền).
+                </p>
+
+                <div className="flex flex-col space-y-0.5">
+                  <CompactUploadRow
+                    title="Tờ trình chủ trương / phê duyệt"
+                    icon={<FileText className="w-4 h-4" />}
+                    description="Giá trị gói thầu, thanh toán, bảo lãnh đã duyệt."
+                    file={toTrinhFile}
+                    processedDoc={toTrinhDoc}
+                    onFileSelect={(f) => handleFileSelect(f, 'totrinh')}
+                    onRemove={() => { setToTrinhFile(null); setToTrinhDoc(null); }}
+                    accept=".pdf,.docx,.doc,.txt"
+                  />
+                  
+                  <CompactUploadRow
+                    title="Giấy phép ĐKKD các bên"
+                    icon={<Building className="w-4 h-4" />}
+                    description="Tên pháp nhân, mã số thuế, địa chỉ trụ sở, người đại diện."
+                    file={dkkdFile}
+                    processedDoc={dkkdDoc}
+                    onFileSelect={(f) => handleFileSelect(f, 'dkkd')}
+                    onRemove={() => { setDkkdFile(null); setDkkdDoc(null); }}
+                    accept=".pdf,.jpg,.jpeg,.png,.docx"
+                  />
+
+                  <CompactUploadRow
+                    title="Giấy ủy quyền đại diện ký kết"
+                    icon={<Stamp className="w-4 h-4" />}
+                    description="Số văn bản, phạm vi ủy quyền, hạn mức và thời hạn hiệu lực."
+                    file={uyQuyenFile}
+                    processedDoc={uyQuyenDoc}
+                    onFileSelect={(f) => handleFileSelect(f, 'uyquyen')}
+                    onRemove={() => { setUyQuyenFile(null); setUyQuyenDoc(null); }}
+                    accept=".pdf,.jpg,.jpeg,.png,.docx"
+                  />
+
+                  <CompactUploadRow
+                    title="Bảng BOQ / Dự toán khối lượng"
+                    icon={<Calculator className="w-4 h-4" />}
+                    description="Bảng tính Excel (.xlsx) chứa đơn giá, khối lượng và tổng cộng."
+                    file={boqFile}
+                    processedDoc={boqDoc}
+                    onFileSelect={(f) => handleFileSelect(f, 'boq')}
+                    onRemove={() => { setBoqFile(null); setBoqDoc(null); }}
+                    accept=".xlsx,.xls"
+                  />
+
+                  <CompactUploadRow
+                    title="Bảng tổng hợp điều chỉnh nội bộ"
+                    icon={<ClipboardList className="w-4 h-4" />}
+                    description="Các điều khoản mà các phòng ban chuyên môn đã chốt sửa."
+                    file={bangTongHopFile}
+                    processedDoc={bangTongHopDoc}
+                    onFileSelect={(f) => handleFileSelect(f, 'bangtonghop')}
+                    onRemove={() => { setBangTongHopFile(null); setBangTongHopDoc(null); }}
+                    accept=".docx,.xlsx,.txt"
+                  />
+
+                  {extraFiles.map((item, index) => (
+                    <CompactUploadRow
+                      key={item.id}
+                      title={`Tài liệu bổ trợ ${index + 1}`}
+                      icon={<File className="w-4 h-4" />}
+                      description="Phụ lục kỹ thuật, quy định thưởng phạt hoặc bảo hành riêng."
+                      file={item.file}
+                      processedDoc={item.doc}
+                      onFileSelect={(f) => updateExtraFile(item.id, f)}
+                      onRemove={() => removeExtraFile(item.id)}
+                      onDeleteRow={() => removeExtraFile(item.id)}
+                    />
+                  ))}
+
+                  <div className="pt-2">
+                    <button 
+                      type="button"
+                      onClick={addExtraFile}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#C5A059] hover:text-[#D4AF37] hover:bg-[#0B1A2D] px-2.5 py-1.5 rounded-lg transition-colors border border-transparent hover:border-[#1E3A5F]"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Thêm tài liệu bổ trợ khác
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* CARD 2: BẢN THẢO HỢP ĐỒNG CẦN SOÁT XÉT */}
+              <div className="bg-[#0B1A2D]/70 rounded-xl border border-[#C5A059]/50 p-3 sm:p-4 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-1.5 h-full bg-[#C5A059]"></div>
+                
+                <div className="flex items-center justify-between mb-1">
+                  <h3 className="text-xs font-bold text-slate-100 uppercase tracking-wider flex items-center gap-1.5">
+                    <Scale className="w-3.5 h-3.5 text-[#C5A059]" />
+                    2. Bản thảo Hợp đồng cần soát xét
+                  </h3>
+                  <span className="text-[10px] bg-red-950/80 text-red-300 border border-red-800/60 px-2 py-0.5 rounded font-bold">
+                    Bắt buộc
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 mb-2.5">
+                  Tải lên file Word (.docx) để AI quét và tự động chèn Track Changes.
+                </p>
                 
                 <CompactUploadRow
-                  title="Giấy phép ĐKKD các bên"
-                  icon={<Building className="w-4 h-4" />}
-                  description="Tên pháp nhân, mã số thuế, địa chỉ trụ sở, người đại diện PL."
-                  file={dkkdFile}
-                  processedDoc={dkkdDoc}
-                  onFileSelect={(f) => handleFileSelect(f, 'dkkd')}
-                  onRemove={() => { setDkkdFile(null); setDkkdDoc(null); }}
-                  accept=".pdf,.jpg,.jpeg,.png,.docx"
+                  title="Bản thảo Hợp đồng kinh tế"
+                  icon={<Scale className="w-4 h-4 text-[#C5A059]" />}
+                  description="Hỗ trợ file .docx (không giới hạn số trang)."
+                  required
+                  file={hopDongFile}
+                  processedDoc={hopDongDoc}
+                  onFileSelect={(f) => handleFileSelect(f, 'hopdong')}
+                  onRemove={() => { setHopDongFile(null); setHopDongDoc(null); }}
+                  accept=".docx"
                 />
+              </div>
+            </div>
 
-                <CompactUploadRow
-                  title="Giấy ủy quyền đại diện ký kết"
-                  icon={<Stamp className="w-4 h-4" />}
-                  description="Số văn bản, phạm vi ủy quyền, hạn mức và thời hạn hiệu lực."
-                  file={uyQuyenFile}
-                  processedDoc={uyQuyenDoc}
-                  onFileSelect={(f) => handleFileSelect(f, 'uyquyen')}
-                  onRemove={() => { setUyQuyenFile(null); setUyQuyenDoc(null); }}
-                  accept=".pdf,.jpg,.jpeg,.png,.docx"
+            {/* FOOTER CỐ ĐỊNH Ở ĐÁY CỘT TRÁI: NÚT BẮT ĐẦU SOÁT XÉT LUÔN NẰM TRÊN MÀN HÌNH */}
+            <div className="p-3.5 bg-[#0E1F35] border-t border-[#1E3A5F] shrink-0 space-y-2">
+              {/* Tên người soát xét hiển thị ghim cố định */}
+              <div className="flex items-center gap-2 bg-[#13253F] border border-[#1E3A5F] rounded-lg px-2.5 py-1.5 focus-within:border-[#C5A059] transition-colors">
+                <UserCheck className="w-3.5 h-3.5 text-[#C5A059] shrink-0" />
+                <span className="text-[11px] text-slate-400 shrink-0 font-medium">Người soát xét:</span>
+                <input
+                  type="text"
+                  value={reviewerName}
+                  onChange={(e) => setReviewerName(e.target.value)}
+                  placeholder="Nhập tên người soát xét..."
+                  className="w-full bg-transparent border-none text-xs text-[#C5A059] font-semibold focus:outline-none placeholder:text-slate-500"
                 />
+              </div>
 
-                <CompactUploadRow
-                  title="Bảng BOQ / Dự toán khối lượng"
-                  icon={<Calculator className="w-4 h-4" />}
-                  description="Bảng tính Excel (.xlsx) chứa đơn giá, khối lượng và tổng cộng."
-                  file={boqFile}
-                  processedDoc={boqDoc}
-                  onFileSelect={(f) => handleFileSelect(f, 'boq')}
-                  onRemove={() => { setBoqFile(null); setBoqDoc(null); }}
-                  accept=".xlsx,.xls"
-                />
+              {error && (
+                <div className="p-2.5 bg-red-950/50 border border-red-500/50 rounded-lg flex items-start gap-2 shadow-lg text-xs text-red-300">
+                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                  <div className="font-medium leading-tight">{error}</div>
+                </div>
+              )}
 
-                <CompactUploadRow
-                  title="Bảng tổng hợp điều chỉnh nội bộ"
-                  icon={<ClipboardList className="w-4 h-4" />}
-                  description="Các điều khoản mà các phòng ban chuyên môn đã chốt sửa."
-                  file={bangTongHopFile}
-                  processedDoc={bangTongHopDoc}
-                  onFileSelect={(f) => handleFileSelect(f, 'bangtonghop')}
-                  onRemove={() => { setBangTongHopFile(null); setBangTongHopDoc(null); }}
-                  accept=".docx,.xlsx,.txt"
-                />
+              <button
+                onClick={handleReview}
+                disabled={isLoading}
+                className={cn(
+                  "relative overflow-hidden w-full bg-gradient-to-r from-[#C5A059] to-[#D4AF37] hover:from-[#D4AF37] hover:to-[#C5A059] text-[#0B1A2D] font-extrabold text-xs sm:text-sm py-3 px-4 rounded-xl shadow-[0_4px_16px_rgba(197,160,89,0.35)] hover:shadow-[0_6px_22px_rgba(197,160,89,0.5)] transition-all flex items-center justify-center gap-2",
+                  isLoading && "opacity-85 cursor-not-allowed hover:shadow-none"
+                )}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span className="uppercase tracking-wider text-xs">Đang đối chiếu tài liệu...</span>
+                  </>
+                ) : (
+                  <>
+                    <Search className="w-4 h-4" />
+                    <span className="uppercase tracking-wider text-xs sm:text-sm">Bắt đầu Soát xét Hợp đồng</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
 
-                {extraFiles.map((item, index) => (
-                  <CompactUploadRow
-                    key={item.id}
-                    title={`Tài liệu bổ trợ ${index + 1}`}
-                    icon={<File className="w-4 h-4" />}
-                    description="Phụ lục kỹ thuật, quy định thưởng phạt hoặc bảo hành riêng."
-                    file={item.file}
-                    processedDoc={item.doc}
-                    onFileSelect={(f) => updateExtraFile(item.id, f)}
-                    onRemove={() => removeExtraFile(item.id)}
+          {/* ==================== CỘT PHẢI: 58% KẾT QUẢ ĐỐI CHIẾU & TRACK CHANGES ==================== */}
+          <div className="w-full lg:w-[58%] flex flex-col h-full bg-[#13253F] rounded-xl shadow-xl border border-[#1E3A5F] overflow-hidden">
+            
+            {/* Header Cột Phải: Cố định ở đỉnh */}
+            <div className="px-5 py-3 border-b border-[#1E3A5F] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-[#13253F] shrink-0">
+              <div>
+                <h2 className="font-bold text-[#C5A059] text-xs sm:text-sm tracking-tight uppercase font-serif">
+                  Kết Quả Rà Soát & Đề Xuất Sửa Đổi
+                </h2>
+                <p className="text-[11px] text-slate-400">
+                  Đối chiếu song song giữa Căn cứ đầu vào và Bản thảo hợp đồng
+                </p>
+              </div>
+
+              {findings && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs bg-red-950/60 text-red-400 border border-red-800/60 px-2.5 py-0.5 rounded-full font-bold">
+                    {findings.length} Sai lệch
+                  </span>
+                  <span className="text-xs bg-emerald-950/60 text-emerald-400 border border-emerald-800/60 px-2.5 py-0.5 rounded-full font-bold">
+                    {acceptedCount} Đã chọn Track Change
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* THANH CÔNG CỤ LỌC & TÌM KIẾM (KHI ĐÃ CÓ KẾT QUẢ): Cố định */}
+            {findings && findings.length > 0 && (
+              <div className="px-5 py-2.5 bg-[#0E1F35] border-b border-[#1E3A5F] flex flex-wrap items-center justify-between gap-2.5 text-xs shrink-0">
+                {/* Ô tìm kiếm */}
+                <div className="relative flex-1 min-w-[180px] max-w-[280px]">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
+                  <input 
+                    type="text" 
+                    placeholder="Tìm kiếm lỗi, điều khoản, lý do..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full bg-[#13253F] border border-[#1E3A5F] text-slate-200 text-xs rounded-lg pl-8 pr-3 py-1 focus:outline-none focus:border-[#C5A059]"
                   />
-                ))}
+                </div>
 
-                <div className="pt-3">
-                  <button 
-                    type="button"
-                    onClick={addExtraFile}
-                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#C5A059] hover:text-[#D4AF37] hover:bg-[#0B1A2D] px-3 py-2 rounded-lg transition-colors border border-transparent hover:border-[#1E3A5F]"
+                {/* Lọc theo mức độ & phân loại */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <select 
+                    value={severityFilter}
+                    onChange={(e) => setSeverityFilter(e.target.value)}
+                    className="bg-[#13253F] border border-[#1E3A5F] text-slate-200 text-xs rounded-lg px-2 py-1 focus:outline-none focus:border-[#C5A059]"
                   >
-                    <Plus className="w-4 h-4" />
-                    Thêm tài liệu bổ trợ khác
+                    <option value="all">Tất cả mức độ</option>
+                    <option value="high">Nghiêm trọng (Đỏ)</option>
+                    <option value="medium">Cần lưu ý (Cam)</option>
+                    <option value="low">Lỗi nhỏ (Xanh)</option>
+                  </select>
+
+                  <button 
+                    onClick={() => toggleSelectAll(true)}
+                    className="text-xs text-[#C5A059] hover:underline px-1 py-0.5"
+                  >
+                    Chọn hết
+                  </button>
+                  <span className="text-slate-600">|</span>
+                  <button 
+                    onClick={() => toggleSelectAll(false)}
+                    className="text-xs text-slate-400 hover:underline px-1 py-0.5"
+                  >
+                    Bỏ chọn
                   </button>
                 </div>
               </div>
+            )}
+            
+            {/* BODY NỘI DUNG: CÓ THANH CUỘN ĐỘC LẬP */}
+            <div className="p-4 sm:p-5 flex-1 min-h-0 overflow-y-auto bg-[#0B1A2D] relative">
+              
+              {/* 1. TRẠNG THÁI ĐANG XỬ LÝ (LOADING) */}
+              {isLoading ? (
+                <div className="h-full flex flex-col items-center justify-center text-[#C5A059] min-h-[360px]">
+                  <Loader2 className="w-10 h-10 animate-spin mb-3 text-[#C5A059]" />
+                  <p className="text-sm font-bold tracking-wider text-slate-100 uppercase">
+                    BLUEMARQ AUDIT ENGINE
+                  </p>
+                  <p className="text-xs text-[#C5A059] mt-2 font-medium max-w-md text-center animate-pulse">
+                    {loadingStep || 'Đang thực thi thuật toán đối chiếu pháp lý chuyên sâu...'}
+                  </p>
+                  <div className="w-48 h-1 bg-[#1E3A5F] rounded-full mt-5 overflow-hidden">
+                    <div className="h-full bg-[#C5A059] animate-[shimmer_1.5s_infinite]"></div>
+                  </div>
+                </div>
+              ) : findings ? (
+                
+                // 2. TRẠNG THÁI ĐÃ CÓ KẾT QUẢ
+                <div className="space-y-4">
+                  {filteredFindings.length === 0 ? (
+                    <div className="bg-[#13253F] border border-[#1E3A5F] p-6 rounded-xl flex flex-col items-center justify-center text-center space-y-2.5 shadow-lg">
+                      <CheckCircle2 className="w-10 h-10 text-emerald-400" />
+                      <h3 className="text-base font-bold text-slate-100">
+                        {findings.length === 0 ? "Bản thảo hoàn hảo!" : "Không tìm thấy lỗi khớp bộ lọc"}
+                      </h3>
+                      <p className="text-slate-400 text-xs max-w-md">
+                        {findings.length === 0 
+                          ? "Không phát hiện sai lệch nào giữa bản thảo hợp đồng và các tài liệu căn cứ (Tờ trình, ĐKKD, BOQ, Giấy ủy quyền)." 
+                          : "Thử thay đổi từ khóa tìm kiếm hoặc chọn 'Tất cả mức độ'."}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3.5">
+                      {filteredFindings.map((item) => {
+                        const isHigh = item.severity === 'high';
+                        const isMed = item.severity === 'medium';
+                        const riskBadgeClass = isHigh 
+                          ? 'text-red-400 bg-red-950/60 border-red-700/60' 
+                          : isMed 
+                            ? 'text-orange-400 bg-orange-950/60 border-orange-700/60' 
+                            : 'text-blue-400 bg-blue-950/60 border-blue-700/60';
+
+                        return (
+                          <div 
+                            key={item.id} 
+                            className={cn(
+                              "bg-[#13253F] rounded-xl shadow-md border transition-all duration-200 overflow-hidden",
+                              item.accepted ? "border-[#1E3A5F] hover:border-[#C5A059]/60" : "border-slate-800 opacity-60"
+                            )}
+                          >
+                            {/* Header Card Lỗi */}
+                            <div className="px-3.5 py-2.5 bg-[#13253F] border-b border-[#1E3A5F] flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                              <div className="flex items-center gap-2.5">
+                                <button
+                                  onClick={() => toggleFindingAccepted(item.id)}
+                                  className="text-slate-400 hover:text-[#C5A059] transition-colors shrink-0"
+                                  title={item.accepted ? "Nhấn để bỏ qua thay đổi này" : "Nhấn để áp dụng Track Change"}
+                                >
+                                  {item.accepted ? (
+                                    <CheckSquare className="w-4 h-4 text-[#C5A059]" />
+                                  ) : (
+                                    <Square className="w-4 h-4" />
+                                  )}
+                                </button>
+
+                                <div className="flex items-center gap-2">
+                                  <span className={cn("px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border", riskBadgeClass)}>
+                                    {isHigh ? 'Nghiêm trọng' : isMed ? 'Cần lưu ý' : 'Lỗi nhỏ'}
+                                  </span>
+                                  <h3 className="font-bold text-slate-100 text-xs">
+                                    {item.issue}
+                                  </h3>
+                                </div>
+                              </div>
+
+                              <button
+                                onClick={() => setDiffModalItem(item)}
+                                className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-[#C5A059] px-2 py-0.5 rounded bg-[#0B1A2D] border border-[#1E3A5F] self-start sm:self-auto"
+                              >
+                                <Eye className="w-3 h-3" />
+                                So sánh
+                              </button>
+                            </div>
+
+                            {/* Lý do & Căn cứ đối chiếu */}
+                            <div className="px-3.5 py-1.5 bg-[#0B1A2D] border-b border-[#1E3A5F] flex items-start gap-1.5 text-[11px] text-slate-400">
+                              <Info className="w-3 h-3 text-[#C5A059] shrink-0 mt-0.5" />
+                              <span className="font-medium text-slate-300">
+                                <strong>Căn cứ:</strong> {item.reason}
+                              </span>
+                            </div>
+
+                            {/* So sánh Đoạn gốc vs Đề xuất sửa */}
+                            <div className="p-3 flex flex-col sm:flex-row gap-3 bg-[#0B1A2D]/40 text-xs">
+                              <div className="flex-1 space-y-1">
+                                <div className="text-[9px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1">
+                                  <FileText className="w-3 h-3 text-red-400" /> Bản thảo gốc (Được thay thế)
+                                </div>
+                                <div className="p-2.5 bg-red-950/20 rounded-lg border border-red-900/30">
+                                  <p className="text-red-400/90 font-serif text-[11px] leading-relaxed line-through decoration-red-500/50 italic whitespace-pre-wrap">
+                                    {item.original}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="hidden sm:flex flex-col items-center justify-center text-slate-600">
+                                <ArrowRight className="w-3.5 h-3.5" />
+                              </div>
+
+                              <div className="flex-1 space-y-1">
+                                <div className="text-[9px] font-bold text-[#C5A059] uppercase tracking-widest flex items-center gap-1">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Đề xuất viết lại (Track Changes)
+                                </div>
+                                <div className="p-2.5 bg-emerald-950/30 rounded-lg border border-emerald-900/50">
+                                  <p className="text-emerald-300 font-serif text-[11px] leading-relaxed font-semibold whitespace-pre-wrap">
+                                    {item.suggestion}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                
+                // 3. TRẠNG THÁI BAN ĐẦU CHƯA SOÁT XÉT
+                <div className="h-full flex flex-col items-center justify-center text-slate-500 space-y-4 px-6 min-h-[360px]">
+                  <div className="w-16 h-16 rounded-full bg-[#13253F] flex items-center justify-center border border-[#1E3A5F] shadow-lg">
+                    <Scale className="w-8 h-8 text-[#C5A059] stroke-[1.5]" />
+                  </div>
+                  <div className="text-center max-w-sm">
+                    <p className="text-sm font-bold text-slate-200 mb-1.5 uppercase tracking-wide font-serif">
+                      Trung Tâm Đối Chiếu Pháp Chế BLUEMARQ
+                    </p>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Tải lên các tài liệu căn cứ ở cột bên trái và bấm <strong className="text-[#C5A059]">Bắt đầu Soát xét</strong> để AI đối chiếu ma trận.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* CARD 2: BẢN THẢO HỢP ĐỒNG CẦN SOÁT XÉT */}
-            <div className="bg-[#13253F] rounded-xl shadow-lg border border-[#C5A059]/50 p-5 sm:p-6 relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-1.5 h-full bg-[#C5A059]"></div>
-              
-              <div className="flex items-center justify-between mb-1">
-                <h2 className="text-base sm:text-lg font-bold text-slate-100 flex items-center gap-2">
-                  <Scale className="w-5 h-5 text-[#C5A059]" />
-                  Tài Liệu Cần Soát Xét (Bản Thảo)
-                </h2>
-                <span className="text-[11px] bg-red-950/80 text-red-300 border border-red-800/60 px-2 py-0.5 rounded font-bold">
-                  Bắt buộc
-                </span>
-              </div>
-              <p className="text-xs sm:text-sm text-slate-400 mb-4">
-                Tải lên file Word (.docx) bản thảo hợp đồng để AI phân tích và tự động chèn Track Changes.
-              </p>
-              
-              <CompactUploadRow
-                title="Bản thảo Hợp đồng kinh tế"
-                icon={<Scale className="w-4 h-4 text-[#C5A059]" />}
-                description="Hỗ trợ file .docx (không giới hạn số trang)."
-                required
-                file={hopDongFile}
-                processedDoc={hopDongDoc}
-                onFileSelect={(f) => handleFileSelect(f, 'hopdong')}
-                onRemove={() => { setHopDongFile(null); setHopDongDoc(null); }}
-                accept=".docx"
-              />
-            </div>
+            {/* FOOTER CỐ ĐỊNH Ở ĐÁY CỘT PHẢI: TOOLBAR XUẤT FILE HOÀN CHỈNH */}
+            {findings && findings.length > 0 && (
+              <div className="p-3 bg-[#0E1F35] border-t border-[#1E3A5F] shrink-0 flex flex-col sm:flex-row items-center justify-between gap-2.5 shadow-xl">
+                <div className="w-full sm:max-w-[280px]">
+                  <div className="flex items-center gap-1.5 bg-[#13253F] border border-[#1E3A5F] rounded-lg px-2.5 py-1 focus-within:border-[#C5A059]">
+                    <UserCheck className="w-3.5 h-3.5 text-[#C5A059] shrink-0" />
+                    <input 
+                      type="text"
+                      value={reviewerName}
+                      onChange={(e) => setReviewerName(e.target.value)}
+                      placeholder="Tên người soát xét..."
+                      className="w-full bg-transparent border-none text-slate-200 text-xs focus:outline-none placeholder:text-slate-500"
+                    />
+                  </div>
+                </div>
 
-            {/* ERROR ALERT */}
-            {error && (
-              <div className="p-4 bg-red-950/40 border border-red-500/50 rounded-xl flex items-start gap-3 shadow-lg">
-                <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-                <div className="text-xs sm:text-sm text-red-300 font-medium leading-relaxed">
-                  {error}
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <button
+                    onClick={handleDownloadReport}
+                    className="flex-1 sm:flex-initial bg-[#13253F] hover:bg-[#1E3A5F] border border-[#1E3A5F] text-slate-200 font-semibold text-xs py-1.5 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5"
+                    title="Tải biên bản soát xét dạng HTML/In ấn"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-[#C5A059]" />
+                    <span>Biên bản</span>
+                  </button>
+
+                  <button 
+                    onClick={handleDownloadDocx}
+                    disabled={acceptedCount === 0}
+                    className={cn(
+                      "flex-1 sm:flex-initial bg-gradient-to-r from-[#C5A059] to-[#D4AF37] hover:from-[#D4AF37] hover:to-[#C5A059] text-[#0B1A2D] font-bold text-xs py-1.5 px-3.5 rounded-lg shadow-lg hover:shadow-[0_4px_16px_rgba(197,160,89,0.4)] transition-all flex items-center justify-center gap-1.5",
+                      acceptedCount === 0 && "opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    <DownloadCloud className="w-3.5 h-3.5" />
+                    <span>Xuất Word ({acceptedCount} Track Changes)</span>
+                  </button>
                 </div>
               </div>
             )}
 
-            {/* NÚT THỰC THI CHÍNH */}
-            <button
-              onClick={handleReview}
-              disabled={isLoading}
-              className={cn(
-                "relative overflow-hidden w-full bg-gradient-to-r from-[#C5A059] to-[#D4AF37] text-[#0B1A2D] font-bold text-sm sm:text-base py-4 px-6 rounded-xl shadow-[0_4px_20px_0_rgba(197,160,89,0.35)] hover:shadow-[0_6px_24px_rgba(197,160,89,0.5)] hover:-translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-[#C5A059]/40 transition-all duration-300 flex items-center justify-center gap-2 group",
-                isLoading && "opacity-85 cursor-not-allowed hover:transform-none hover:shadow-none"
-              )}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  <span className="uppercase tracking-widest font-extrabold text-[13px] sm:text-[14px]">
-                    Đang đối chiếu ma trận tài liệu...
-                  </span>
-                </>
-              ) : (
-                <>
-                  <Search className="w-5 h-5" />
-                  <span className="uppercase tracking-widest font-extrabold text-[13px] sm:text-[14px]">
-                    Bắt đầu Soát xét Hợp đồng
-                  </span>
-                </>
-              )}
-            </button>
           </div>
 
-          {/* ==================== CỘT PHẢI: 60% KẾT QUẢ ĐỐI CHIẾU & TRACK CHANGES ==================== */}
-          <div className="w-full lg:w-[58%] flex flex-col">
-            <div className="bg-[#13253F] rounded-xl shadow-lg border border-[#1E3A5F] overflow-hidden flex flex-col h-full min-h-[600px] lg:min-h-[850px]">
-              
-              {/* Header Cột Phải */}
-              <div className="px-6 py-4 border-b border-[#1E3A5F] flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#13253F]">
-                <div>
-                  <h2 className="font-bold text-[#C5A059] text-base sm:text-lg tracking-tight flex items-center gap-2.5 uppercase font-serif">
-                    Kết Quả Rà Soát & Đề Xuất Sửa Đổi
-                  </h2>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Đối chiếu song song giữa Căn cứ đầu vào và Bản thảo hợp đồng
-                  </p>
-                </div>
-
-                {findings && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs bg-red-950/60 text-red-400 border border-red-800/60 px-3 py-1 rounded-full font-bold">
-                      {findings.length} Sai lệch
-                    </span>
-                    <span className="text-xs bg-emerald-950/60 text-emerald-400 border border-emerald-800/60 px-3 py-1 rounded-full font-bold">
-                      {acceptedCount} Đã chọn Track Change
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* THANH CÔNG CỤ LỌC & TÌM KIẾM (KHI ĐÃ CÓ KẾT QUẢ) */}
-              {findings && findings.length > 0 && (
-                <div className="px-6 py-3 bg-[#0E1F35] border-b border-[#1E3A5F] flex flex-wrap items-center justify-between gap-3 text-xs">
-                  {/* Ô tìm kiếm */}
-                  <div className="relative flex-1 min-w-[200px] max-w-[320px]">
-                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
-                    <input 
-                      type="text" 
-                      placeholder="Tìm kiếm lỗi, điều khoản, lý do..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full bg-[#13253F] border border-[#1E3A5F] text-slate-200 text-xs rounded-lg pl-8 pr-3 py-1.5 focus:outline-none focus:border-[#C5A059]"
-                    />
-                  </div>
-
-                  {/* Lọc theo mức độ & phân loại */}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <select 
-                      value={severityFilter}
-                      onChange={(e) => setSeverityFilter(e.target.value)}
-                      className="bg-[#13253F] border border-[#1E3A5F] text-slate-200 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#C5A059]"
-                    >
-                      <option value="all">Tất cả mức độ</option>
-                      <option value="high">Nghiêm trọng (Đỏ)</option>
-                      <option value="medium">Cần lưu ý (Cam)</option>
-                      <option value="low">Lỗi nhỏ (Xanh)</option>
-                    </select>
-
-                    <button 
-                      onClick={() => toggleSelectAll(true)}
-                      className="text-xs text-[#C5A059] hover:underline px-1.5 py-1"
-                    >
-                      Chọn tất cả
-                    </button>
-                    <span className="text-slate-600">|</span>
-                    <button 
-                      onClick={() => toggleSelectAll(false)}
-                      className="text-xs text-slate-400 hover:underline px-1.5 py-1"
-                    >
-                      Bỏ chọn hết
-                    </button>
-                  </div>
-                </div>
-              )}
-              
-              {/* BODY NỘI DUNG */}
-              <div className="p-5 sm:p-6 flex-1 bg-[#0B1A2D] relative overflow-y-auto">
-                
-                {/* 1. TRẠNG THÁI ĐANG XỬ LÝ (LOADING) */}
-                {isLoading ? (
-                  <div className="h-full flex flex-col items-center justify-center text-[#C5A059] min-h-[480px]">
-                    <Loader2 className="w-12 h-12 animate-spin mb-4 text-[#C5A059]" />
-                    <p className="text-base font-bold tracking-wider text-slate-100 uppercase">
-                      BLUEMARQ AUDIT ENGINE
-                    </p>
-                    <p className="text-xs sm:text-sm text-[#C5A059] mt-2 font-medium max-w-md text-center animate-pulse">
-                      {loadingStep || 'Đang thực thi thuật toán đối chiếu pháp lý chuyên sâu...'}
-                    </p>
-                    <div className="w-48 h-1 bg-[#1E3A5F] rounded-full mt-6 overflow-hidden">
-                      <div className="h-full bg-[#C5A059] animate-[shimmer_1.5s_infinite]"></div>
-                    </div>
-                  </div>
-                ) : findings ? (
-                  
-                  // 2. TRẠNG THÁI ĐÃ CÓ KẾT QUẢ
-                  <div className="space-y-5">
-                    {filteredFindings.length === 0 ? (
-                      <div className="bg-[#13253F] border border-[#1E3A5F] p-8 rounded-xl flex flex-col items-center justify-center text-center space-y-3 shadow-lg">
-                        <CheckCircle2 className="w-12 h-12 text-emerald-400" />
-                        <h3 className="text-lg font-bold text-slate-100">
-                          {findings.length === 0 ? "Bản thảo hoàn hảo!" : "Không tìm thấy lỗi khớp bộ lọc"}
-                        </h3>
-                        <p className="text-slate-400 text-xs sm:text-sm max-w-md">
-                          {findings.length === 0 
-                            ? "Không phát hiện sai lệch nào giữa bản thảo hợp đồng và các tài liệu căn cứ (Tờ trình, ĐKKD, BOQ, Giấy ủy quyền)." 
-                            : "Thử thay đổi từ khóa tìm kiếm hoặc chọn 'Tất cả mức độ'."}
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        {filteredFindings.map((item) => {
-                          const isHigh = item.severity === 'high';
-                          const isMed = item.severity === 'medium';
-                          const riskBadgeClass = isHigh 
-                            ? 'text-red-400 bg-red-950/60 border-red-700/60' 
-                            : isMed 
-                              ? 'text-orange-400 bg-orange-950/60 border-orange-700/60' 
-                              : 'text-blue-400 bg-blue-950/60 border-blue-700/60';
-                          const riskDotClass = isHigh ? 'bg-red-500' : isMed ? 'bg-orange-500' : 'bg-blue-500';
-
-                          return (
-                            <div 
-                              key={item.id} 
-                              className={cn(
-                                "bg-[#13253F] rounded-xl shadow-md border transition-all duration-200 overflow-hidden",
-                                item.accepted ? "border-[#1E3A5F] hover:border-[#C5A059]/60" : "border-slate-800 opacity-60"
-                              )}
-                            >
-                              {/* Header Card Lỗi */}
-                              <div className="px-4 py-3 bg-[#13253F] border-b border-[#1E3A5F] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                                <div className="flex items-center gap-3">
-                                  {/* Checkbox chấp nhận sửa đổi */}
-                                  <button
-                                    onClick={() => toggleFindingAccepted(item.id)}
-                                    className="text-slate-400 hover:text-[#C5A059] transition-colors shrink-0"
-                                    title={item.accepted ? "Nhấn để bỏ qua thay đổi này" : "Nhấn để áp dụng Track Change"}
-                                  >
-                                    {item.accepted ? (
-                                      <CheckSquare className="w-5 h-5 text-[#C5A059]" />
-                                    ) : (
-                                      <Square className="w-5 h-5" />
-                                    )}
-                                  </button>
-
-                                  <div className="flex items-center gap-2">
-                                    <span className={cn("px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border", riskBadgeClass)}>
-                                      {isHigh ? 'Nghiêm trọng' : isMed ? 'Cần lưu ý' : 'Lỗi nhỏ'}
-                                    </span>
-                                    <h3 className="font-bold text-slate-100 text-xs sm:text-sm">
-                                      {item.issue}
-                                    </h3>
-                                  </div>
-                                </div>
-
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    onClick={() => setDiffModalItem(item)}
-                                    className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-[#C5A059] px-2 py-1 rounded bg-[#0B1A2D] border border-[#1E3A5F]"
-                                  >
-                                    <Eye className="w-3 h-3" />
-                                    So sánh
-                                  </button>
-                                </div>
-                              </div>
-
-                              {/* Lý do & Căn cứ đối chiếu */}
-                              <div className="px-4 py-2 bg-[#0B1A2D] border-b border-[#1E3A5F] flex items-start gap-2 text-xs text-slate-400">
-                                <Info className="w-3.5 h-3.5 text-[#C5A059] shrink-0 mt-0.5" />
-                                <span className="font-medium text-slate-300">
-                                  <strong>Căn cứ:</strong> {item.reason}
-                                </span>
-                              </div>
-
-                              {/* So sánh Đoạn gốc vs Đề xuất sửa */}
-                              <div className="p-4 flex flex-col sm:flex-row gap-4 bg-[#0B1A2D]/40 text-xs">
-                                {/* Đoạn gốc */}
-                                <div className="flex-1 space-y-1.5">
-                                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1">
-                                    <FileText className="w-3 h-3 text-red-400" /> Bản thảo gốc (Được thay thế)
-                                  </div>
-                                  <div className="p-3 bg-red-950/20 rounded-lg border border-red-900/30">
-                                    <p className="text-red-400/90 font-serif leading-relaxed line-through decoration-red-500/50 italic whitespace-pre-wrap">
-                                      {item.original}
-                                    </p>
-                                  </div>
-                                </div>
-
-                                <div className="hidden sm:flex flex-col items-center justify-center text-slate-600">
-                                  <ArrowRight className="w-4 h-4" />
-                                </div>
-
-                                {/* Đề xuất sửa */}
-                                <div className="flex-1 space-y-1.5">
-                                  <div className="text-[10px] font-bold text-[#C5A059] uppercase tracking-widest flex items-center gap-1">
-                                    <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Đề xuất viết lại (Track Changes)
-                                  </div>
-                                  <div className="p-3 bg-emerald-950/30 rounded-lg border border-emerald-900/50">
-                                    <p className="text-emerald-300 font-serif leading-relaxed font-semibold whitespace-pre-wrap">
-                                      {item.suggestion}
-                                    </p>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-
-                        {/* TOOLBAR XUẤT FILE HOÀN CHỈNH */}
-                        <div className="mt-8 pt-5 border-t border-[#1E3A5F] flex flex-col xl:flex-row items-center justify-between gap-4 bg-[#0E1F35] p-5 rounded-xl border shadow-xl">
-                          <div className="w-full xl:max-w-[380px]">
-                            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
-                              Tên người soát xét (Tác giả Track Changes):
-                            </label>
-                            <input 
-                              type="text"
-                              value={reviewerName}
-                              onChange={(e) => setReviewerName(e.target.value)}
-                              placeholder="VD: Nguyễn Văn A - Ban Pháp Chế..."
-                              className="w-full bg-[#13253F] border border-[#1E3A5F] text-slate-200 text-xs rounded-lg px-3 py-2.5 focus:outline-none focus:border-[#C5A059]"
-                            />
-                          </div>
-
-                          <div className="flex items-center gap-3 w-full xl:w-auto">
-                            {/* Xuất Báo cáo HTML */}
-                            <button
-                              onClick={handleDownloadReport}
-                              className="flex-1 xl:flex-initial bg-[#13253F] hover:bg-[#1E3A5F] border border-[#1E3A5F] text-slate-200 font-semibold text-xs py-2.5 px-4 rounded-lg transition-all flex items-center justify-center gap-1.5"
-                              title="Tải biên bản soát xét dạng HTML/In ấn"
-                            >
-                              <Printer className="w-4 h-4 text-[#C5A059]" />
-                              <span>Biên bản Soát xét</span>
-                            </button>
-
-                            {/* Tải Bản thảo Word Track Changes */}
-                            <button 
-                              onClick={handleDownloadDocx}
-                              disabled={acceptedCount === 0}
-                              className={cn(
-                                "flex-1 xl:flex-initial bg-gradient-to-r from-[#C5A059] to-[#D4AF37] hover:from-[#D4AF37] hover:to-[#C5A059] text-[#0B1A2D] font-bold text-xs sm:text-sm py-2.5 px-5 rounded-lg shadow-lg hover:shadow-[0_4px_16px_rgba(197,160,89,0.4)] transition-all flex items-center justify-center gap-2",
-                                acceptedCount === 0 && "opacity-50 cursor-not-allowed"
-                              )}
-                            >
-                              <DownloadCloud className="w-4 h-4" />
-                              <span>Xuất File Word ({acceptedCount} Track Changes)</span>
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  
-                  // 3. TRẠNG THÁI BAN ĐẦU CHƯA SOÁT XÉT
-                  <div className="h-full flex flex-col items-center justify-center text-slate-500 space-y-5 px-6 min-h-[480px]">
-                    <div className="w-20 h-20 rounded-full bg-[#13253F] flex items-center justify-center border border-[#1E3A5F] shadow-lg">
-                      <Scale className="w-10 h-10 text-[#C5A059] stroke-[1.5]" />
-                    </div>
-                    <div className="text-center max-w-md">
-                      <p className="text-base font-bold text-slate-200 mb-2 uppercase tracking-wide font-serif">
-                        Trung Tâm Đối Chiếu Pháp Chế BLUEMARQ
-                      </p>
-                      <p className="text-xs text-slate-400 leading-relaxed">
-                        Tải lên các tài liệu căn cứ (Tờ trình, ĐKKD, BOQ, Ủy quyền) và Bản thảo Hợp đồng (.docx) ở cột bên trái, sau đó nhấn <strong className="text-[#C5A059]">Bắt đầu Soát xét</strong> để AI đối chiếu ma trận.
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
         </div>
       </main>
 

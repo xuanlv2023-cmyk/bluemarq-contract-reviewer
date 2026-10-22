@@ -12,3 +12,33 @@
     100% { transform: translateX(100%); }
   }
 }
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background-color: #0B1A2D;
+}
+
+/* Custom Sleek Scrollbar for BLUEMARQ Enterprise App */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #1E3A5F #0B1A2D;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0B1A2D;
+}
+::-webkit-scrollbar-thumb {
+  background: #1E3A5F;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #C5A059;
+}

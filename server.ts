@@ -68,44 +68,37 @@ async function startServer() {
       // Đính kèm prompt phân tích chi tiết
       contentsParts.push({ text: prompt });
 
-      // Model chính và fallback
-      const primaryModel = model || 'gemini-2.5-pro';
-      const fallbackModel = 'gemini-2.5-flash';
-
+      // Chuỗi candidate models: Ưu tiên Gemini 3.8 Flash -> 2.0 Flash -> 1.5 Pro -> 1.5 Flash
+      const candidateModels = [
+        model || 'gemini-3.8-flash',
+        'gemini-3.8-flash',
+        'gemini-2.0-flash',
+        'gemini-1.5-pro',
+        'gemini-1.5-flash'
+      ];
+      const modelsToTry = Array.from(new Set(candidateModels));
       let responseText = '';
+      let lastError: any = null;
 
-      try {
-        const response = await ai.models.generateContent({
-          model: primaryModel,
-          contents: contentsParts,
-          config: {
-            responseMimeType: 'application/json',
-          }
-        });
-        responseText = response.text || '[]';
-      } catch (genError: any) {
-        const errorStr = String(genError?.message || '');
-        console.warn(`Lỗi khi gọi model ${primaryModel}: ${errorStr}. Thử fallback sang ${fallbackModel}...`);
-
-        if (
-          errorStr.includes('429') ||
-          errorStr.includes('503') ||
-          errorStr.includes('404') ||
-          errorStr.includes('quota') ||
-          errorStr.includes('not found') ||
-          errorStr.includes('RESOURCE_EXHAUSTED')
-        ) {
-          const fallbackResponse = await ai.models.generateContent({
-            model: fallbackModel,
+      for (const m of modelsToTry) {
+        try {
+          const response = await ai.models.generateContent({
+            model: m,
             contents: contentsParts,
             config: {
               responseMimeType: 'application/json',
             }
           });
-          responseText = fallbackResponse.text || '[]';
-        } else {
-          throw genError;
+          responseText = response.text || '[]';
+          if (responseText) break;
+        } catch (genError: any) {
+          console.warn(`Model ${m} thất bại: ${genError?.message}. Thử model tiếp theo...`);
+          lastError = genError;
         }
+      }
+
+      if (!responseText) {
+        throw lastError || new Error('Không thể kết nối tới các model AI của Google.');
       }
 
       // Làm sạch và parse JSON

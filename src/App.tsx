@@ -6,9 +6,5 @@
 import { ContractReviewer } from './components/ContractReviewer';
 
 export default function App() {
-  return (
-    <div>
-      <ContractReviewer />
-    </div>
-  );
+  return <ContractReviewer />;
 }
