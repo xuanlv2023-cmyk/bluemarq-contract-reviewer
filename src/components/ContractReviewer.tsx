@@ -37,10 +37,12 @@ interface CompactUploadRowProps {
   onDeleteRow?: () => void;
   required?: boolean;
   accept?: string;
+  editableTitle?: boolean;
+  onTitleChange?: (newTitle: string) => void;
 }
 
 function CompactUploadRow({ 
-  title, icon, description, file, processedDoc, onFileSelect, onRemove, onDeleteRow, required, accept 
+  title, icon, description, file, processedDoc, onFileSelect, onRemove, onDeleteRow, required, accept, editableTitle, onTitleChange 
 }: CompactUploadRowProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -57,9 +59,23 @@ function CompactUploadRow({
           {icon}
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-slate-200 text-sm flex items-center leading-normal">
-            {title} {required && <span className="text-[#C5A059] ml-1 font-bold">*</span>}
-          </h3>
+          {editableTitle && onTitleChange ? (
+            <div className="flex items-center gap-1.5 w-full">
+              <input 
+                type="text"
+                value={title}
+                onChange={(e) => onTitleChange(e.target.value)}
+                placeholder="Nhập tên tài liệu..."
+                className="bg-[#0B1A2D] border border-[#1E3A5F] focus:border-[#C5A059] rounded px-2 py-0.5 text-xs font-semibold text-slate-100 w-full max-w-[240px] focus:outline-none transition-colors"
+                title="Bấm vào để đổi tên tài liệu này"
+              />
+              <span className="text-[10px] text-[#C5A059] italic shrink-0">(Sửa tên)</span>
+            </div>
+          ) : (
+            <h3 className="font-semibold text-slate-200 text-sm flex items-center leading-normal">
+              {title} {required && <span className="text-[#C5A059] ml-1 font-bold">*</span>}
+            </h3>
+          )}
           <p className="text-[12px] text-slate-400 mt-0.5 truncate">{description}</p>
           {processedDoc?.summary && (
             <p className="text-[11px] text-[#C5A059] mt-0.5 font-medium truncate flex items-center gap-1">
@@ -149,7 +165,7 @@ export function ContractReviewer() {
   const [boqFile, setBoqFile] = useState<File | null>(null);
   const [boqDoc, setBoqDoc] = useState<ProcessedDoc | null>(null);
 
-  const [extraFiles, setExtraFiles] = useState<{ id: string; file: File | null; doc: ProcessedDoc | null }[]>([]);
+  const [extraFiles, setExtraFiles] = useState<{ id: string; title: string; file: File | null; doc: ProcessedDoc | null }[]>([]);
 
   const [hopDongFile, setHopDongFile] = useState<File | null>(null);
   const [hopDongDoc, setHopDongDoc] = useState<ProcessedDoc | null>(null);
@@ -170,7 +186,9 @@ export function ContractReviewer() {
   const [reviewerName, setReviewerName] = useState(() => localStorage.getItem('bmq_reviewer_name') || 'xuanlv');
   const [reviewerDepartment, setReviewerDepartment] = useState<string>(() => localStorage.getItem('bmq_reviewer_department') || 'legal');
   const [collapsedDepts, setCollapsedDepts] = useState<Record<string, boolean>>({});
-  const [selectedModel, setSelectedModel] = useState<string>('gemini-3.8-flash');
+  const [selectedEngine, setSelectedEngine] = useState<'auto' | 'gemini' | 'chatgpt' | 'claude'>(() => {
+    return (localStorage.getItem('bmq_selected_engine') as any) || 'auto';
+  });
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('bmq_gemini_api_key') || '');
   const [showConfigModal, setShowConfigModal] = useState(false);
 
@@ -185,6 +203,10 @@ export function ContractReviewer() {
   useEffect(() => {
     localStorage.setItem('bmq_reviewer_department', reviewerDepartment);
   }, [reviewerDepartment]);
+
+  useEffect(() => {
+    localStorage.setItem('bmq_selected_engine', selectedEngine);
+  }, [selectedEngine]);
 
   const toggleDeptCollapse = (deptKey: string) => {
     setCollapsedDepts(prev => ({ ...prev, [deptKey]: !prev[deptKey] }));
@@ -215,16 +237,34 @@ export function ContractReviewer() {
   };
 
   const addExtraFile = () => {
-    setExtraFiles([...extraFiles, { id: Math.random().toString(36).substring(7), file: null, doc: null }]);
+    const nextIdx = extraFiles.length + 1;
+    setExtraFiles([...extraFiles, { 
+      id: Math.random().toString(36).substring(7), 
+      title: `Tài liệu bổ trợ ${nextIdx}`, 
+      file: null, 
+      doc: null 
+    }]);
   };
 
   const updateExtraFile = async (id: string, file: File) => {
     try {
       const doc = await processFile(file);
-      setExtraFiles(extraFiles.map(f => f.id === id ? { ...f, file, doc } : f));
+      setExtraFiles(prev => prev.map(item => {
+        if (item.id === id) {
+          const autoTitle = item.title.startsWith('Tài liệu bổ trợ')
+            ? file.name.replace(/\.[^/.]+$/, "")
+            : item.title;
+          return { ...item, file, doc, title: autoTitle };
+        }
+        return item;
+      }));
     } catch (e: any) {
       setError(`Lỗi đọc tệp bổ trợ: ${e.message}`);
     }
+  };
+
+  const updateExtraFileTitle = (id: string, newTitle: string) => {
+    setExtraFiles(prev => prev.map(item => item.id === id ? { ...item, title: newTitle } : item));
   };
 
   const removeExtraFile = (id: string) => {
@@ -288,7 +328,8 @@ export function ContractReviewer() {
       // ĐẨY TẤT CẢ TÀI LIỆU BỔ TRỢ (PDF / Ảnh scan) VÀO MEDIAFILES CHO GEMINI ĐỌC
       extraFiles.forEach((item, idx) => {
         if (item.doc) {
-          checkAndPushMedia(item.doc, `Tài liệu bổ trợ ${idx + 1} (${item.file?.name || 'Văn bản bổ sung'})`);
+          const docTitle = item.title || `Tài liệu bổ trợ ${idx + 1}`;
+          checkAndPushMedia(item.doc, `${docTitle} (${item.file?.name || 'Văn bản bổ sung'})`);
         }
       });
 
@@ -296,11 +337,12 @@ export function ContractReviewer() {
       setLoadingStep('Đang tổng hợp dữ liệu Tờ trình, ĐKKD 2 bên, BOQ và các văn bản bổ trợ...');
       const extraDocsSummary = extraFiles
         .map((f, i) => {
-          const fileName = f.file?.name || `Tài liệu ${i + 1}`;
+          const docTitle = f.title || `Tài liệu bổ trợ ${i + 1}`;
+          const fileName = f.file?.name || `Tệp ${i + 1}`;
           if (f.doc?.textContent && f.doc.textContent.trim()) {
-            return `[Tài liệu bổ trợ ${i + 1} (${fileName})]:\n${f.doc.textContent}`;
+            return `[VĂN BẢN ĐIỀU CHỈNH / TÀI LIỆU BỔ TRỢ: ${docTitle} (Tệp: ${fileName})]:\n${f.doc.textContent}`;
           } else if (f.doc?.base64Data) {
-            return `[Tài liệu bổ trợ ${i + 1} (${fileName}) - Tệp PDF/ảnh scan đính kèm trực tiếp trong payload Gemini Multimodal để rà soát đối chiếu ưu tiên]`;
+            return `[VĂN BẢN ĐIỀU CHỈNH / TÀI LIỆU BỔ TRỢ: ${docTitle} (Tệp: ${fileName}) - Tệp PDF/ảnh scan đính kèm trực tiếp trong payload Gemini Multimodal để rà soát đối chiếu ưu tiên]`;
           }
           return null;
         })
@@ -319,15 +361,16 @@ export function ContractReviewer() {
         reviewerName,
       });
 
-      // BƯỚC 4: Gửi yêu cầu Soát xét AI tự động qua máy chủ (Zero-Config cho người dùng)
-      setLoadingStep(`BLUEMARQ AI Engine (${selectedModel}) đang phân tích toàn diện ma trận hợp đồng...`);
+      // BƯỚC 4: Gửi yêu cầu Soát xét AI tự động với cơ chế xoay nền tảng & xoay key
+      const engineName = selectedEngine === 'auto' ? 'Tự Động Thông Minh (Xoay Nền tảng & Key)' : selectedEngine === 'chatgpt' ? 'OpenAI ChatGPT' : selectedEngine === 'claude' ? 'Anthropic Claude' : 'Google Gemini';
+      setLoadingStep(`BLUEMARQ AI Engine (${engineName}) đang phân tích toàn diện ma trận hợp đồng...`);
       
       const rawFindings = await executeContractReview(
         {
           prompt,
           mediaFiles,
           apiKey: apiKey || undefined,
-          model: selectedModel,
+          engine: selectedEngine,
         },
         (statusMsg) => {
           setLoadingStep(statusMsg);
@@ -432,7 +475,7 @@ export function ContractReviewer() {
     if (uyQuyenNhanThauFile) baseDocsList.push({ title: 'Giấy ủy quyền bên Nhận thầu', fileName: uyQuyenNhanThauFile.name, type: uyQuyenNhanThauDoc?.fileType || 'ủy quyền' });
     if (boqFile) baseDocsList.push({ title: 'Bảng BOQ / Dự toán', fileName: boqFile.name, type: 'Bảng tính Excel' });
     extraFiles.forEach((ef, idx) => {
-      if (ef.file) baseDocsList.push({ title: `Tài liệu bổ trợ ${idx + 1}`, fileName: ef.file.name, type: 'phụ lục' });
+      if (ef.file) baseDocsList.push({ title: ef.title || `Tài liệu bổ trợ ${idx + 1}`, fileName: ef.file.name, type: 'văn bản bổ trợ' });
     });
 
     const reportData: AuditReportData = {
@@ -488,19 +531,18 @@ export function ContractReviewer() {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Lựa chọn Model AI */}
-            <div className="hidden md:flex items-center gap-2 bg-[#0B1A2D] border border-[#1E3A5F] rounded-lg px-2.5 py-1 text-xs text-slate-300">
-              <span className="text-slate-400">Engine:</span>
+            {/* Lựa chọn Động cơ AI (Tự động xoay nền tảng & Key) */}
+            <div className="flex items-center gap-2 bg-[#0B1A2D] border border-[#1E3A5F] rounded-lg px-2.5 py-1 text-xs text-slate-300">
+              <span className="text-slate-400">Động cơ:</span>
               <select 
-                value={selectedModel} 
-                onChange={(e) => setSelectedModel(e.target.value)}
-                className="bg-transparent text-[#C5A059] font-semibold focus:outline-none cursor-pointer max-w-[320px] truncate"
+                value={selectedEngine} 
+                onChange={(e) => setSelectedEngine(e.target.value as any)}
+                className="bg-transparent text-[#C5A059] font-bold focus:outline-none cursor-pointer"
               >
-                {AVAILABLE_MODELS.map((m) => (
-                  <option key={m.id} value={m.id} className="bg-[#13253F] text-slate-200">
-                    {m.name}
-                  </option>
-                ))}
+                <option value="auto" className="bg-[#13253F] text-[#C5A059] font-bold">⚡ Tự động (Tự xoay nền tảng & Key)</option>
+                <option value="gemini" className="bg-[#13253F] text-slate-200">Google Gemini</option>
+                <option value="chatgpt" className="bg-[#13253F] text-slate-200">OpenAI ChatGPT</option>
+                <option value="claude" className="bg-[#13253F] text-slate-200">Anthropic Claude</option>
               </select>
             </div>
 
@@ -540,48 +582,48 @@ export function ContractReviewer() {
               </span>
             </div>
 
+            {/* KHỐI CỐ ĐỊNH PINNED: THÔNG TIN NGƯỜI SOÁT XÉT & PHÒNG BAN TRỰC THUỘC (LUÔN CỐ ĐỊNH TRÊN ĐỈNH, KHÔNG BỊ CUỘN MẤT) */}
+            <div className="p-3 bg-[#0E1F35] border-b border-[#1E3A5F] shrink-0 space-y-1.5 shadow-sm">
+              <div className="flex items-center justify-between mb-0.5">
+                <label htmlFor="leftReviewerInput" className="text-xs font-bold text-[#C5A059] uppercase tracking-wider flex items-center gap-1.5">
+                  <UserCheck className="w-3.5 h-3.5 text-[#C5A059]" />
+                  Người soát xét & Phòng ban trực thuộc
+                </label>
+                <span className="text-[10px] bg-[#13253F] border border-[#1E3A5F] text-[#C5A059] px-2 py-0.5 rounded font-mono">
+                  Tác giả Word
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <input
+                  id="leftReviewerInput"
+                  type="text"
+                  value={reviewerName}
+                  onChange={(e) => setReviewerName(e.target.value)}
+                  placeholder="Họ và tên người soát xét..."
+                  className="w-full bg-[#13253F] border border-[#1E3A5F] focus:border-[#C5A059] rounded-lg px-2.5 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none transition-colors"
+                />
+
+                <select
+                  value={reviewerDepartment}
+                  onChange={(e) => setReviewerDepartment(e.target.value)}
+                  className="w-full bg-[#13253F] border border-[#1E3A5F] focus:border-[#C5A059] rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none transition-colors font-medium"
+                >
+                  <option value="legal">🏛️ Ban Pháp Chế</option>
+                  <option value="accounting">💰 Phòng Kế Toán</option>
+                  <option value="cost_qs">📊 Phòng QLCP & Khối Lượng</option>
+                  <option value="procurement">📦 Ban Chọn Thầu - Cung Ứng</option>
+                  <option value="pm_site">🏗️ Ban Điều Hành Dự Án</option>
+                </select>
+              </div>
+
+              <p className="text-[10.5px] text-slate-400 leading-tight">
+                Tác giả trong Word: <strong className="text-slate-200">{reviewerName || 'xuanlv'} ({DEPT_TITLE_MAP[reviewerDepartment] || 'Ban Pháp Chế'})</strong>.
+              </p>
+            </div>
+
             {/* Danh sách tài liệu: Có THANH CUỘN ĐỘC LẬP */}
             <div className="flex-1 min-h-0 overflow-y-auto p-3.5 sm:p-4 space-y-3.5">
-              
-              {/* THÔNG TIN NGƯỜI SOÁT XÉT & PHÒNG BAN TRỰC THUỘC */}
-              <div className="bg-[#0B1A2D]/80 rounded-xl border border-[#1E3A5F] p-3 sm:p-3.5 shadow-md space-y-2">
-                <div className="flex items-center justify-between mb-0.5">
-                  <label htmlFor="leftReviewerInput" className="text-xs font-bold text-[#C5A059] uppercase tracking-wider flex items-center gap-1.5">
-                    <UserCheck className="w-3.5 h-3.5 text-[#C5A059]" />
-                    Người soát xét & Phòng ban
-                  </label>
-                  <span className="text-[10px] bg-[#13253F] border border-[#1E3A5F] text-[#C5A059] px-2 py-0.5 rounded font-mono">
-                    Tác giả Track Changes Word
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <input
-                    id="leftReviewerInput"
-                    type="text"
-                    value={reviewerName}
-                    onChange={(e) => setReviewerName(e.target.value)}
-                    placeholder="Họ và tên người soát xét..."
-                    className="w-full bg-[#13253F] border border-[#1E3A5F] focus:border-[#C5A059] rounded-lg px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none transition-colors"
-                  />
-
-                  <select
-                    value={reviewerDepartment}
-                    onChange={(e) => setReviewerDepartment(e.target.value)}
-                    className="w-full bg-[#13253F] border border-[#1E3A5F] focus:border-[#C5A059] rounded-lg px-2.5 py-2 text-xs text-slate-100 focus:outline-none transition-colors"
-                  >
-                    <option value="legal">🏛️ Ban Pháp Chế</option>
-                    <option value="accounting">💰 Phòng Kế Toán</option>
-                    <option value="cost_qs">📊 Phòng QLCP & Khối Lượng</option>
-                    <option value="procurement">📦 Ban Chọn Thầu - Cung Ứng</option>
-                    <option value="pm_site">🏗️ Ban Điều Hành Dự Án</option>
-                  </select>
-                </div>
-
-                <p className="text-[10.5px] text-slate-400 leading-tight">
-                  Tác giả trong Word: <strong className="text-slate-200">{reviewerName || 'Người soát xét'} ({DEPT_TITLE_MAP[reviewerDepartment] || 'Ban Pháp Chế'})</strong>.
-                </p>
-              </div>
 
               {/* CARD 1: CĂN CỨ ĐỐI CHIẾU */}
               <div className="bg-[#0B1A2D]/70 rounded-xl border border-[#1E3A5F] p-3 sm:p-4">
@@ -665,11 +707,13 @@ export function ContractReviewer() {
                   {extraFiles.map((item, index) => (
                     <CompactUploadRow
                       key={item.id}
-                      title={`Tài liệu bổ trợ ${index + 1}`}
+                      title={item.title || `Tài liệu bổ trợ ${index + 1}`}
                       icon={<File className="w-4 h-4" />}
                       description="Văn bản xin điều chỉnh, phụ lục kỹ thuật hoặc thỏa thuận bổ sung."
                       file={item.file}
                       processedDoc={item.doc}
+                      editableTitle
+                      onTitleChange={(newTitle) => updateExtraFileTitle(item.id, newTitle)}
                       onFileSelect={(f) => updateExtraFile(item.id, f)}
                       onRemove={() => removeExtraFile(item.id)}
                       onDeleteRow={() => removeExtraFile(item.id)}
@@ -1271,16 +1315,22 @@ export function ContractReviewer() {
               </button>
             </div>
 
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Bạn có thể nhập API Key cá nhân của bạn từ Google AI Studio (được lưu an toàn trong trình duyệt của bạn), hoặc để trống để sử dụng API Key mặc định của máy chủ.
-            </p>
+            <div className="space-y-2">
+              <p className="text-xs text-slate-300 leading-relaxed">
+                Hỗ trợ dán <strong>nhiều API Key cách nhau bởi dấu phẩy <code className="bg-[#0B1A2D] px-1.5 py-0.5 rounded text-[#C5A059] font-mono">,</code></strong>.
+                Hệ thống sẽ <strong>tự động xoay vòng key</strong> khi có key bị quá tải (503) hoặc hết lượt (429).
+              </p>
+              <p className="text-[11px] text-slate-400">
+                Nếu để trống, hệ thống sẽ tự động dùng danh sách Key được cấu hình trên máy chủ Vercel.
+              </p>
+            </div>
 
             <div>
               <input 
                 type="password"
                 defaultValue={apiKey}
                 id="apiKeyInput"
-                placeholder="Dán mã khóa AI Studio (AIzaSy...)"
+                placeholder="Dán key hoặc nhiều key cách nhau bằng dấu phẩy (AIzaSy1..., AIzaSy2...)"
                 className="w-full bg-[#0B1A2D] border border-[#1E3A5F] text-slate-200 text-xs rounded-lg px-3 py-2.5 focus:outline-none focus:border-[#C5A059] font-mono"
               />
             </div>
