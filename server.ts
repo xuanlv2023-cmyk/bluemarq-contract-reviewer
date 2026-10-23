@@ -25,9 +25,9 @@ async function startServer() {
 
   // Endpoint cung cấp API key cấu hình hệ thống cho Client SDK
   app.get('/api/key', (req, res) => {
-    const key = process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+    const key = process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY_1 || process.env.GEMINI_API_KEY_2;
     if (!key || key.trim() === '' || key === 'MY_GEMINI_API_KEY') {
-      return res.status(404).json({ error: 'Chưa cấu hình GEMINI_API_KEY.' });
+      return res.status(404).json({ error: 'Chưa cấu hình GEMINI_API_KEY (hoặc GEMINI_API_KEY_1).' });
     }
     return res.json({ key: key.trim() });
   });

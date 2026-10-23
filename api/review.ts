@@ -16,10 +16,12 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: 'Thiếu nội dung yêu cầu soát xét (Prompt).' });
     }
 
-    const key = (apiKey && apiKey.trim().length > 10) ? apiKey.trim() : process.env.GEMINI_API_KEY;
+    const key = (apiKey && apiKey.trim().length > 10) 
+      ? apiKey.trim() 
+      : (process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY_1 || process.env.GEMINI_API_KEY_2 || process.env.GOOGLE_API_KEY);
     if (!key || key.trim() === '' || key === 'MY_GEMINI_API_KEY') {
       return res.status(500).json({
-        error: 'Chưa cấu hình GEMINI_API_KEY trong Vercel Environment Variables. Vui lòng thêm biến môi trường trên Vercel hoặc dán API Key cá nhân.'
+        error: 'Chưa cấu hình GEMINI_API_KEY (hoặc GEMINI_API_KEY_1) trong Vercel Environment Variables. Vui lòng thêm biến môi trường trên Vercel hoặc dán API Key cá nhân.'
       });
     }
 

@@ -1,84 +1,94 @@
-# ⚖️ BLUEMARQ - TRỢ LÝ SOÁT XÉT HỢP ĐỒNG AI (ENTERPRISE CONTRACT REVIEWER)
-
-Ứng dụng web chuyên nghiệp hỗ trợ Ban Pháp chế, Ban Quản lý Dự án (PMO) và Ban Đấu thầu / Mua sắm đối chiếu ma trận tài liệu và soát xét hợp đồng kinh tế trước khi ký phát hành.
-
----
-
-## 🌟 CÁC TÍNH NĂNG VƯỢT TRỘI ĐÃ HOÀN THIỆN
-
-1. **Đối chiếu Ma trận Đa tài liệu 5 Tầng:**
-   - **Tờ trình chủ trương / phê duyệt (PDF/Word):** Kiểm tra giá trị gói thầu, tỷ lệ tạm ứng, bảo lãnh thực hiện HĐ, tiến độ và điều kiện thanh toán.
-   - **Giấy phép ĐKKD (PDF/Ảnh scan):** Kiểm tra từng ký tự tên công ty, mã số thuế, địa chỉ trụ sở chính, người đại diện theo pháp luật.
-   - **Giấy ủy quyền (PDF/Ảnh scan):** Kiểm tra người ký có đúng thẩm quyền, số văn bản ủy quyền, hạn mức tiền tối đa và thời hạn hiệu lực.
-   - **Bảng BOQ / Dự toán (Excel `.xlsx`):** Bóc tách tự động danh mục đơn giá, khối lượng và dòng tổng cộng để so khớp với Điều khoản Giá hợp đồng.
-   - **Bảng tổng hợp điều chỉnh nội bộ:** Rà soát xem các nội dung các phòng ban đã chốt sửa đã được cập nhật vào bản thảo in chưa.
-2. **Xuất File Word (.docx) Tự Động Track Changes & Comments:**
-   - Sử dụng chuẩn Microsoft OpenXML ECMA-376.
-   - Ghi nhận vết gạch đỏ (Deletion) và chèn chữ xanh (Insertion) mang **đúng tên người soát xét** (VD: *Nguyễn Văn A - Ban Pháp Chế*).
-   - Tự động chèn **bong bóng Comment giải trình** bên lề phải văn bản nêu rõ căn cứ sai lệch so với Tờ trình/ĐKKD/BOQ.
-   - Mở trên Microsoft Word, Office 365, WPS Office mượt mà, không bao giờ bị lỗi format hay hỏng file.
-3. **Biên Bản Soát Xét Hợp Đồng (Executive Audit Report):**
-   - Xuất biên bản tóm tắt pháp lý dạng bảng đối chiếu song song để kẹp vào hồ sơ trình ký Ban Lãnh đạo.
-4. **Bảng Rà Soát Tương Tác (Interactive Matrix):**
-   - Cho phép Cán bộ Pháp chế duyệt qua từng phát hiện, nhấn **Chấp nhận** hoặc **Bỏ qua** sửa đổi trước khi xuất file.
-   - Bộ lọc thông minh theo mức độ rủi ro (Nghiêm trọng, Cần lưu ý, Lỗi nhỏ) và tìm kiếm từ khóa.
+# 🏛️ BLUEMARQ GROUP - HỆ THỐNG TRÍ TUỆ NHÂN TẠO SOÁT XÉT HỢP ĐỒNG ONLINE
+> **Hệ thống Pháp chế AI & Đối chiếu Ma trận Đa tài liệu 5 Phòng ban chuyên môn | Tự động xuất Microsoft Word Track Changes & Comments chuẩn ECMA-376**
 
 ---
 
-## 🚀 HƯỚNG DẪN ĐẨY LÊN GITHUB & DEPLOY ONLINE (CHẠY 24/7 MIỄN PHÍ)
+## 🌟 TỔNG QUAN HỆ THỐNG
 
-### BƯỚC 1: Đẩy Dự Án Lên GitHub (Dễ nhất với GitHub Desktop)
-Máy tính của bạn đã cài sẵn **GitHub Desktop**:
-1. Mở phần mềm **GitHub Desktop**.
-2. Chọn menu **File** ➔ **Add Local Repository...**
-3. Trỏ tới thư mục dự án này:
-   `c:\Users\Xuanlv\OneDrive - BLUEMARQ GROUP\XUANLV-KHONG XOA\1.TAI LIEU CA NHAN\6. AI\4. PM AI\contract-review-assistant-3-juin-2026-11-05-24`
-4. Nếu GitHub Desktop thông báo *"This directory does not appear to be a Git repository"*, nhấn **create a repository** ➔ Đặt tên repo là `bluemarq-contract-reviewer` ➔ Nhấn **Create Repository**.
-5. Nhấn nút **Publish repository** lên tài khoản GitHub của bạn (chọn Private hoặc Public tùy ý).
+Ứng dụng web cấp doanh nghiệp được phát triển riêng cho **Tập đoàn BLUEMARQ (BLUEMARQ GROUP)**, hỗ trợ Hội đồng Soát xét và các Ban chuyên môn đối chiếu ma trận tài liệu căn cứ với bản thảo hợp đồng kinh tế trước khi trình Ban Tổng Giám đốc phê duyệt và ký phát hành.
 
 ---
 
-### BƯỚC 2: Triển Khai Miễn Phí Lên Render.com (Chỉ mất 2 phút)
-1. Đăng nhập vào [https://render.com](https://render.com) (Đăng nhập bằng tài khoản GitHub).
-2. Nhấn nút **New +** ở góc phải ➔ Chọn **Web Service**.
-3. Chọn kho lưu trữ **`bluemarq-contract-reviewer`** vừa đẩy lên.
-4. Điền các thông tin:
-   - **Name:** `bluemarq-contract-reviewer` (hoặc tên tùy thích).
-   - **Environment:** `Node`
-   - **Build Command:** `npm install && npm run build`
-   - **Start Command:** `npm run start`
-5. Cuộn xuống mục **Environment Variables** (Biến môi trường) ➔ Nhấn **Add Environment Variable**:
-   - Key: `GEMINI_API_KEY`
-   - Value: `(Dán API Key của bạn lấy tại https://aistudio.google.com/app/apikey)`
-6. Nhấn **Deploy Web Service**.
-7. Sau 2-3 phút, Render sẽ cấp cho bạn một đường link HTTPS trực tuyến (ví dụ: `https://bluemarq-contract-reviewer.onrender.com`). Bạn có thể chia sẻ link này cho toàn bộ nhân viên công ty sử dụng ngay trên trình duyệt máy tính hoặc điện thoại!
+## 🚀 CÁC TÍNH NĂNG VƯỢT TRỘI ĐÃ HOÀN THIỆN
+
+### 1. Ma Trận Đối Chiếu 5 Phòng Ban Chuyên Môn BLUEMARQ
+Hệ thống tự động phân loại, đánh giá và gom nhóm toàn bộ các điều khoản sai lệch theo đúng thẩm quyền và trách nhiệm của 5 Ban/Phòng ban trực thuộc:
+* 🏛️ **Ban Pháp Chế (14 tiêu chí):** Tư cách chủ thể ký kết (ĐKKD 2 bên), thẩm quyền đại diện theo ủy quyền, chế tài phạt vi phạm (tối đa 8% theo Luật Thương mại), giải quyết tranh chấp tại Tòa án/Trọng tài, điều khoản bảo mật và chấm dứt hợp đồng.
+* 💰 **Phòng Kế Toán (6 tiêu chí):** Bản chất tiền tạm ứng vs tiền cọc (bắt buộc xuất hóa đơn VAT theo luật thuế dịch vụ), điều kiện giải ngân từng đợt, hóa đơn chứng từ hợp lệ, tài khoản ngân hàng thụ hưởng.
+* 📊 **Phòng Quản Lý Chi Phí & Khối Lượng (QS - 13 tiêu chí):** Đối chiếu bảng khối lượng BOQ/Dự toán Excel (.xlsx), đơn giá cố định/đơn giá điều chỉnh, tiến độ thi công chi tiết, bảo lãnh tạm ứng và bảo lãnh thực hiện hợp đồng.
+* 📦 **Ban Chọn Thầu - Cung Ứng (13 tiêu chí):** Đúng biểu mẫu hợp đồng được phê duyệt, đối tượng gói thầu, chủng loại vật tư thiết bị, bảo hành nhà sản xuất và điều kiện thương mại Incoterms.
+* 🏗️ **Ban Điều Hành Dự Án (Site PM):** Phù hợp mặt bằng hiện trường, an toàn lao động vệ sinh môi trường (HSE), mốc tiến độ bàn giao và tiêu chuẩn kỹ thuật nghiệm thu sản phẩm.
+
+### 2. Xuất File Word (.docx) Tự Động Phân Quyền Theo Phòng Ban
+* **Công nghệ:** Chuẩn Microsoft OpenXML ECMA-376 nguyên bản.
+* **Tác giả chuẩn xác:** Hiển thị rõ họ tên và phòng ban người soát xét (VD: `Nguyễn Văn A (Ban Pháp Chế)`).
+* **Hai hình thức tác động linh hoạt:**
+  * **Track Changes (Sửa trực tiếp):** Gạch đỏ xóa chữ cũ (`<w:del>`) và chèn chữ xanh mới (`<w:ins>`) vào đúng vị trí văn bản.
+  * **Comments (Bong bóng ý kiến bên lề):** Giữ nguyên 100% văn bản gốc, gắn bong bóng Comment giải trình căn cứ sai lệch so với Tờ trình/ĐKKD/BOQ để Người ký phê duyệt.
+* **Tùy chọn xuất file:**
+  * **Xuất Word theo phòng ban của mình:** Chỉ tải về các điểm sửa đổi và nhận xét thuộc thẩm quyền của phòng ban người đang soát xét.
+  * **Xuất Word Tổng Hợp:** Tải về toàn bộ nhận xét của cả 5 phòng ban phục vụ họp giao ban rà soát chung.
+
+### 3. Động Cơ AI Tự Động Thông Minh (Multi-AI Engine & Key Pool)
+* **Chế độ mặc định:** `⚡ Tự động (Tự xoay nền tảng & Key)` — Người dùng không cần bận tâm về việc chọn mô hình hay cấu hình kỹ thuật phức tạp.
+* **Tự động xoay nền tảng (Platform Fallback):**
+  1. Ưu tiên 1: **Google Gemini** (tối ưu xử lý văn bản dài, đọc trực tiếp PDF scan và tài liệu ảnh).
+  2. Ưu tiên 2: Tự động chuyển tiếp sang **OpenAI ChatGPT** nếu cụm máy chủ Google quá tải.
+  3. Ưu tiên 3: Tự động chuyển tiếp sang **Anthropic Claude** nếu ChatGPT bận.
+* **Cơ chế Key Pool chống nghẽn (Zero-Downtime):** Tự động nhận diện nhiều API Key (`GEMINI_API_KEY_1`, `GEMINI_API_KEY_2`,...) và luân chuyển key tức thời khi gặp lỗi quá tải 503 hoặc hết hạn ngạch 429.
+
+### 4. Giao Diện Pinned Header & Tùy Chỉnh Tiêu Đề Hồ Sơ
+* **Khối Người soát xét & Phòng ban:** Luôn ghim cố định trên đỉnh Cột Trái, không bị cuộn che khuất khi người dùng nạp nhiều hồ sơ.
+* **Tài liệu bổ trợ linh hoạt:** Cho phép sửa đổi tiêu đề trực tiếp (ví dụ: *Tờ trình điều chỉnh số 26*, *Phụ lục kỹ thuật*, *Biên bản thỏa thuận*...). AI tự động phân tích đúng tên văn bản và áp dụng nguyên tắc ưu tiên văn bản phát hành sau.
+* **Phiếu Soát Xét BLUEMARQ:** Xuất biên bản báo cáo pháp lý dạng HTML/In ấn phục vụ kẹp vào hồ sơ trình ký Ban Tổng Giám đốc.
 
 ---
 
-## 💻 HƯỚNG DẪN CHẠY THỬ NGHIỆM TẠI MÁY CÁ NHÂN (LOCAL DEV)
+## 🌐 HƯỚNG DẪN CẤU HÌNH BIẾN MÔI TRƯỜNG TRÊN VERCEL
 
-Nếu bạn muốn chạy trực tiếp trên máy tính Windows của bạn:
-1. Cài đặt Node.js LTS (nếu máy chưa có) bằng lệnh PowerShell:
-   ```powershell
-   winget install OpenJS.NodeJS.LTS
-   ```
-2. Mở terminal tại thư mục dự án và chạy:
+Hệ thống được tối ưu hóa để vận hành 24/7 trên nền tảng đám mây **Vercel**. Bạn cấu hình các biến môi trường tại mục:  
+👉 **Project Settings ➔ Environment Variables**:
+
+| Tên biến trên Vercel | Mục đích | Hỗ trợ xoay Key |
+| :--- | :--- | :--- |
+| `GEMINI_API_KEY` | Key chính Google Gemini AI Studio | Có thể dán nhiều key cách nhau bởi dấu phẩy `,` |
+| `GEMINI_API_KEY_1`, `GEMINI_API_KEY_2`... | Danh sách từng key Google Gemini | Hệ thống tự động gom toàn bộ thành Key Pool |
+| `OPENAI_API_KEY` *(hoặc `_1`, `_2`)* | Key OpenAI ChatGPT dự phòng | Tự động kích hoạt khi Gemini quá tải |
+| `CLAUDE_API_KEY` *(hoặc `_1`, `_2`)* | Key Anthropic Claude dự phòng | Tự động kích hoạt khi các nền tảng trước bận |
+
+> [!IMPORTANT]
+> **Lưu ý trên Vercel:**  
+> Đảm bảo tích chọn đủ 3 môi trường: **Production**, **Preview**, **Development**. Sau khi lưu biến môi trường, chỉ cần đẩy commit mới hoặc bấm **Redeploy** tại tab *Deployments* là máy chủ Vercel sẽ tự động nạp key.
+
+---
+
+## 💻 HƯỚNG DẪN PHÁT TRIỂN NỘI BỘ (LOCAL DEV)
+
+Nếu bạn muốn chạy thử nghiệm trực tiếp trên máy tính cá nhân:
+1. Cài đặt các gói phụ thuộc:
    ```bash
    npm install
+   ```
+2. Khởi chạy máy chủ phát triển:
+   ```bash
    npm run dev
    ```
 3. Mở trình duyệt truy cập: `http://localhost:3000`
 
 ---
 
-## 📂 KIẾN TRÚC MÃ NGUỒN
+## 📂 CẤU TRÚC THƯ MỤC DỰ ÁN
 
-- [server.ts](server.ts): Máy chủ Express backend tiếp nhận đa file, gọi Google Gemini 2.5 Pro với cơ chế tự động fallback khi nghẽn tải.
-- [src/components/ContractReviewer.tsx](src/components/ContractReviewer.tsx): Giao diện người dùng chuẩn BLUEMARQ Group với đầy đủ tính năng tương tác.
-- [src/lib/docx-track-changes.ts](src/lib/docx-track-changes.ts): Động cơ chèn Track Changes và Comments theo chuẩn Microsoft OpenXML ECMA-376.
-- [src/lib/excel-parser.ts](src/lib/excel-parser.ts): Module bóc tách Bảng BOQ / Dự toán khối lượng từ file Excel (.xlsx).
-- [src/lib/file-extractor.ts](src/lib/file-extractor.ts): Module xử lý thống nhất Word, PDF scan, Ảnh scan, Excel.
-- [src/lib/gemini-prompts.ts](src/lib/gemini-prompts.ts): Bộ prompt đối chiếu ma trận 5 tầng chuyên sâu cho Luật sư Pháp chế.
-- [src/lib/report-generator.ts](src/lib/report-generator.ts): Module xuất Biên bản Soát xét Hợp đồng chính thức.
-- [Dockerfile](Dockerfile): Cấu hình Docker multi-stage tối ưu dung lượng sẵn sàng deploy lên Cloud.
-- [render.yaml](render.yaml): Cấu hình tự động triển khai 1-click lên Render Cloud.
+* `api/key.ts`: Endpoint Serverless Function tự động quét, tổng hợp và cấp phát Key Pool an toàn cho Client.
+* `api/review.ts`: Endpoint xử lý phân tích dự phòng trên máy chủ Vercel.
+* `src/components/ContractReviewer.tsx`: Giao diện chính người dùng chuẩn thương hiệu BLUEMARQ (Cột hồ sơ Pinned, bộ lọc 5 phòng ban, thanh cuộn độc lập).
+* `src/lib/docx-track-changes.ts`: Động cơ xử lý file Word chèn Track Changes và Comments theo chuẩn OpenXML ECMA-376.
+* `src/lib/gemini-service.ts`: Bộ điều phối AI Đa nền tảng (Gemini / ChatGPT / Claude) với thuật toán tự động xoay Key và Fallback Model.
+* `src/lib/gemini-prompts.ts`: Khung Prompt ma trận đối chiếu 5 phòng ban của Tập đoàn BLUEMARQ.
+* `src/lib/report-generator.ts`: Động cơ xuất Phiếu Soát Xét Hợp Đồng chuẩn doanh nghiệp.
+* `src/lib/file-extractor.ts`: Bộ trích xuất dữ liệu đa định dạng (Word, Excel BOQ, PDF, Ảnh scan).
+* `vercel.json`: Cấu hình định tuyến và tối ưu tài nguyên Serverless trên Vercel Cloud.
+
+---
+
+© 2026 **BLUEMARQ GROUP** — Hệ Thống Pháp Chế Trí Tuệ Nhân Tạo Doanh Nghiệp.
