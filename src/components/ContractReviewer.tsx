@@ -966,7 +966,32 @@ export function ContractReviewer() {
 
                   <button 
                     onClick={() => toggleSelectAll(true)}
-                    className="text-                // 2. TRẠNG THÁI ĐÃ CÓ KẾT QUẢ - GOM NHÓM THEO 5 PHÒNG BAN CHUẨN BLUEMARQ
+                    className="text-xs text-[#C5A059] hover:underline px-1 py-0.5"
+                  >
+                    Chọn hết
+                  </button>
+                  <span className="text-slate-600">|</span>
+                  <button 
+                    onClick={() => toggleSelectAll(false)}
+                    className="text-xs text-slate-400 hover:underline px-1 py-0.5"
+                  >
+                    Bỏ chọn
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            {/* BODY NỘI DUNG: CÓ THANH CUỘN ĐỘC LẬP */}
+            <div className="p-4 sm:p-5 flex-1 min-h-0 overflow-y-auto bg-[#0B1A2D] relative">
+              
+              {/* 1. TRẠNG THÁI ĐANG XỬ LÝ (LOADING) */}
+              {isLoading ? (
+                <div className="h-full flex flex-col items-center justify-center text-[#C5A059] min-h-[360px]">
+                  <Loader2 className="w-10 h-10 animate-spin mb-3 text-[#C5A059]" />
+                  <p className="text-sm font-semibold text-slate-200">{loadingStep || 'Hệ thống đang tiến hành rà soát...'}</p>
+                </div>
+              ) : findings ? (
+                // 2. TRẠNG THÁI ĐÃ CÓ KẾT QUẢ - GOM NHÓM THEO 5 PHÒNG BAN CHUẨN BLUEMARQ
                 <div className="space-y-4">
                   {filteredFindings.length === 0 ? (
                     <div className="bg-[#13253F] border border-[#1E3A5F] p-6 rounded-xl flex flex-col items-center justify-center text-center space-y-2.5 shadow-lg">
