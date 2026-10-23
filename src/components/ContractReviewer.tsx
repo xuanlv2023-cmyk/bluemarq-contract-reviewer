@@ -162,6 +162,7 @@ export function ContractReviewer() {
 
   // Bộ lọc & Tìm kiếm
   const [searchQuery, setSearchQuery] = useState('');
+  const [departmentFilter, setDepartmentFilter] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [severityFilter, setSeverityFilter] = useState<string>('all');
 
@@ -322,18 +323,31 @@ export function ContractReviewer() {
           setLoadingStep(statusMsg);
         }
       );
-      // Khởi tạo trạng thái mặc định: phân loại rõ ràng Track Change vs Chỉ Comment
-      const formattedFindings: FindingWithSelection[] = rawFindings.map((f, idx) => ({
-        id: f.id || idx + 1,
-        issue: f.issue || 'Vấn đề cần sửa đổi',
-        original: f.original || '',
-        suggestion: f.suggestion || '',
-        reason: f.reason || 'Đối chiếu với tài liệu căn cứ',
-        severity: f.severity === 'high' ? 'high' : f.severity === 'medium' ? 'medium' : 'low',
-        category: f.category || 'financial_boq',
-        actionType: f.actionType === 'comment_only' ? 'comment_only' : 'track_change',
-        accepted: true,
-      }));
+      // Khởi tạo trạng thái mặc định: phân loại theo 5 phòng ban và Track Change vs Chỉ Comment
+      const formattedFindings: FindingWithSelection[] = rawFindings.map((f, idx) => {
+        const dept = f.department || 'legal';
+        const deptName = f.departmentName || (
+          dept === 'accounting' ? 'Phòng Kế Toán' :
+          dept === 'cost_qs' ? 'Phòng QLCP & Khối Lượng' :
+          dept === 'procurement' ? 'Ban Chọn Thầu - Cung Ứng' :
+          dept === 'pm_site' ? 'Ban Điều Hành Dự Án' : 'Ban Pháp Chế'
+        );
+
+        return {
+          id: f.id || idx + 1,
+          department: dept,
+          departmentName: deptName,
+          criterion: f.criterion || 'Đối chiếu ma trận',
+          issue: f.issue || 'Vấn đề cần sửa đổi',
+          original: f.original || '',
+          suggestion: f.suggestion || '',
+          reason: f.reason || 'Đối chiếu với tài liệu căn cứ',
+          severity: f.severity === 'high' ? 'high' : f.severity === 'medium' ? 'medium' : 'low',
+          category: f.category || 'financial_boq',
+          actionType: f.actionType === 'comment_only' ? 'comment_only' : 'track_change',
+          accepted: true,
+        };
+      });
 
       setFindings(formattedFindings);
     } catch (err: any) {
@@ -409,6 +423,7 @@ export function ContractReviewer() {
 
   // Lọc danh sách phát hiện
   const filteredFindings = (findings || []).filter(item => {
+    if (departmentFilter !== 'all' && (item.department || 'legal') !== departmentFilter) return false;
     if (categoryFilter !== 'all' && item.category !== categoryFilter) return false;
     if (severityFilter !== 'all' && item.severity !== severityFilter) return false;
     if (searchQuery.trim() !== '') {
@@ -417,7 +432,9 @@ export function ContractReviewer() {
       const matchOrig = item.original.toLowerCase().includes(q);
       const matchSugg = item.suggestion.toLowerCase().includes(q);
       const matchReason = item.reason.toLowerCase().includes(q);
-      if (!matchIssue && !matchOrig && !matchSugg && !matchReason) return false;
+      const matchCrit = (item.criterion || '').toLowerCase().includes(q);
+      const matchDept = (item.departmentName || '').toLowerCase().includes(q);
+      if (!matchIssue && !matchOrig && !matchSugg && !matchReason && !matchCrit && !matchDept) return false;
     }
     return true;
   });
@@ -727,10 +744,10 @@ export function ContractReviewer() {
             <div className="px-5 py-3 border-b border-[#1E3A5F] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-[#13253F] shrink-0">
               <div>
                 <h2 className="font-bold text-[#C5A059] text-xs sm:text-sm tracking-tight uppercase font-serif">
-                  Kết Quả Rà Soát & Đề Xuất Sửa Đổi
+                  KẾT QUẢ RÀ SOÁT MA TRẬN 5 PHÒNG BAN BLUEMARQ
                 </h2>
                 <p className="text-[11px] text-slate-400">
-                  Đối chiếu song song giữa Căn cứ đầu vào và Bản thảo hợp đồng
+                  Pháp chế • Kế toán • QL Chi phí & BOQ • Chọn thầu • Ban Dự án
                 </p>
               </div>
 
@@ -749,7 +766,94 @@ export function ContractReviewer() {
               )}
             </div>
 
-            {/* THANH CÔNG CỤ LỌC & TÌM KIẾM (KHI ĐÃ CÓ KẾT QUẢ): Cố định */}
+            {/* THANH TAB PHÂN LOẠI 5 PHÒNG BAN CHUYÊN MÔN BLUEMARQ */}
+            {findings && findings.length > 0 && (
+              <div className="px-4 py-2 bg-[#0B1A2D] border-b border-[#1E3A5F] flex items-center gap-1.5 overflow-x-auto text-xs shrink-0 no-scrollbar">
+                <span className="text-[11px] font-bold text-slate-400 mr-1 flex items-center gap-1 shrink-0">
+                  <Filter className="w-3 h-3 text-[#C5A059]" /> Bộ phận:
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => setDepartmentFilter('all')}
+                  className={cn(
+                    "px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all whitespace-nowrap flex items-center gap-1",
+                    departmentFilter === 'all' 
+                      ? "bg-[#C5A059] text-[#0B1A2D] shadow" 
+                      : "bg-[#13253F] text-slate-300 hover:text-white border border-[#1E3A5F]"
+                  )}
+                >
+                  Tất cả ({findings.length})
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDepartmentFilter('legal')}
+                  className={cn(
+                    "px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all whitespace-nowrap flex items-center gap-1",
+                    departmentFilter === 'legal' 
+                      ? "bg-blue-600 text-white shadow" 
+                      : "bg-[#13253F] text-slate-300 hover:text-white border border-[#1E3A5F]"
+                  )}
+                >
+                  🏛️ Pháp chế ({findings.filter(f => (f.department || 'legal') === 'legal').length})
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDepartmentFilter('accounting')}
+                  className={cn(
+                    "px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all whitespace-nowrap flex items-center gap-1",
+                    departmentFilter === 'accounting' 
+                      ? "bg-emerald-600 text-white shadow" 
+                      : "bg-[#13253F] text-slate-300 hover:text-white border border-[#1E3A5F]"
+                  )}
+                >
+                  💰 Kế toán ({findings.filter(f => f.department === 'accounting').length})
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDepartmentFilter('cost_qs')}
+                  className={cn(
+                    "px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all whitespace-nowrap flex items-center gap-1",
+                    departmentFilter === 'cost_qs' 
+                      ? "bg-amber-600 text-white shadow" 
+                      : "bg-[#13253F] text-slate-300 hover:text-white border border-[#1E3A5F]"
+                  )}
+                >
+                  📊 QL Chi phí & BOQ ({findings.filter(f => f.department === 'cost_qs').length})
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDepartmentFilter('procurement')}
+                  className={cn(
+                    "px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all whitespace-nowrap flex items-center gap-1",
+                    departmentFilter === 'procurement' 
+                      ? "bg-purple-600 text-white shadow" 
+                      : "bg-[#13253F] text-slate-300 hover:text-white border border-[#1E3A5F]"
+                  )}
+                >
+                  📦 Chọn thầu ({findings.filter(f => f.department === 'procurement').length})
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDepartmentFilter('pm_site')}
+                  className={cn(
+                    "px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all whitespace-nowrap flex items-center gap-1",
+                    departmentFilter === 'pm_site' 
+                      ? "bg-indigo-600 text-white shadow" 
+                      : "bg-[#13253F] text-slate-300 hover:text-white border border-[#1E3A5F]"
+                  )}
+                >
+                  🏗️ Ban Dự án ({findings.filter(f => f.department === 'pm_site').length})
+                </button>
+              </div>
+            )}
+
+            {/* THANH CÔNG CỤ LỌC MỨC ĐỘ & TÌM KIẾM */}
             {findings && findings.length > 0 && (
               <div className="px-5 py-2.5 bg-[#0E1F35] border-b border-[#1E3A5F] flex flex-wrap items-center justify-between gap-2.5 text-xs shrink-0">
                 {/* Ô tìm kiếm */}
@@ -819,12 +923,12 @@ export function ContractReviewer() {
                     <div className="bg-[#13253F] border border-[#1E3A5F] p-6 rounded-xl flex flex-col items-center justify-center text-center space-y-2.5 shadow-lg">
                       <CheckCircle2 className="w-10 h-10 text-emerald-400" />
                       <h3 className="text-base font-bold text-slate-100">
-                        {findings.length === 0 ? "Bản thảo hoàn hảo!" : "Không tìm thấy lỗi khớp bộ lọc"}
+                        {findings.length === 0 ? "Bản thảo hoàn hảo!" : "Không tìm thấy nội dung khớp bộ lọc"}
                       </h3>
                       <p className="text-slate-400 text-xs max-w-md">
                         {findings.length === 0 
-                          ? "Không phát hiện sai lệch nào giữa bản thảo hợp đồng và các tài liệu căn cứ (Tờ trình, ĐKKD, BOQ, Giấy ủy quyền)." 
-                          : "Thử thay đổi từ khóa tìm kiếm hoặc chọn 'Tất cả mức độ'."}
+                          ? "Không phát hiện sai lệch nào giữa bản thảo hợp đồng và các hồ sơ căn cứ." 
+                          : "Thử chọn tab 'Tất cả' hoặc đổi từ khóa tìm kiếm."}
                       </p>
                     </div>
                   ) : (
@@ -838,6 +942,19 @@ export function ContractReviewer() {
                             ? 'text-orange-400 bg-orange-950/60 border-orange-700/60' 
                             : 'text-blue-400 bg-blue-950/60 border-blue-700/60';
 
+                        const deptBadgeColor = 
+                          item.department === 'accounting' ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700/60' :
+                          item.department === 'cost_qs' ? 'bg-amber-950/80 text-amber-300 border-amber-700/60' :
+                          item.department === 'procurement' ? 'bg-purple-950/80 text-purple-300 border-purple-700/60' :
+                          item.department === 'pm_site' ? 'bg-indigo-950/80 text-indigo-300 border-indigo-700/60' :
+                          'bg-blue-950/80 text-blue-300 border-blue-700/60';
+
+                        const deptIcon = 
+                          item.department === 'accounting' ? '💰' :
+                          item.department === 'cost_qs' ? '📊' :
+                          item.department === 'procurement' ? '📦' :
+                          item.department === 'pm_site' ? '🏗️' : '🏛️';
+
                         return (
                           <div 
                             key={item.id} 
@@ -847,32 +964,46 @@ export function ContractReviewer() {
                             )}
                           >
                             {/* Header Card Lỗi */}
-                            <div className="px-3.5 py-2.5 bg-[#13253F] border-b border-[#1E3A5F] flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                              <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                                <button
-                                  onClick={() => toggleFindingAccepted(item.id)}
-                                  className="text-slate-400 hover:text-[#C5A059] transition-colors shrink-0"
-                                  title={item.accepted ? "Nhấn để bỏ qua phát hiện này" : "Nhấn để áp dụng"}
-                                >
-                                  {item.accepted ? (
-                                    <CheckSquare className="w-4 h-4 text-[#C5A059]" />
-                                  ) : (
-                                    <Square className="w-4 h-4" />
-                                  )}
-                                </button>
+                            <div className="px-3.5 py-2.5 bg-[#13253F] border-b border-[#1E3A5F] flex flex-col gap-2">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-center gap-2 flex-wrap flex-1">
+                                  <button
+                                    onClick={() => toggleFindingAccepted(item.id)}
+                                    className="text-slate-400 hover:text-[#C5A059] transition-colors shrink-0"
+                                    title={item.accepted ? "Nhấn để bỏ qua phát hiện này" : "Nhấn để áp dụng"}
+                                  >
+                                    {item.accepted ? (
+                                      <CheckSquare className="w-4 h-4 text-[#C5A059]" />
+                                    ) : (
+                                      <Square className="w-4 h-4" />
+                                    )}
+                                  </button>
 
-                                <div className="flex items-center gap-2 flex-wrap">
+                                  {/* Badge Phòng ban */}
+                                  <span className={cn("px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wide border flex items-center gap-1", deptBadgeColor)}>
+                                    {deptIcon} {item.departmentName || 'Ban Pháp Chế'}
+                                  </span>
+
+                                  {/* Tiêu chí */}
+                                  {item.criterion && (
+                                    <span className="text-[10px] text-slate-300 bg-[#0B1A2D] px-2 py-0.5 rounded border border-[#1E3A5F] font-medium">
+                                      Tiêu chí: <strong>{item.criterion}</strong>
+                                    </span>
+                                  )}
+
+                                  {/* Mức độ rủi ro */}
                                   <span className={cn("px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border", riskBadgeClass)}>
                                     {isHigh ? 'Nghiêm trọng' : isMed ? 'Cần lưu ý' : 'Lỗi nhỏ'}
                                   </span>
 
+                                  {/* Hình thức */}
                                   {item.actionType === 'comment_only' ? (
                                     <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-amber-950/80 text-amber-300 border border-amber-700/60 inline-flex items-center gap-1">
-                                      💬 Ý kiến tư vấn (Chỉ chèn Comment)
+                                      💬 Chỉ Comment
                                     </span>
                                   ) : (
                                     <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-emerald-950/80 text-emerald-300 border border-emerald-700/60 inline-flex items-center gap-1">
-                                      ✍️ Sai lệch căn cứ (Gạch sửa trực tiếp)
+                                      ✍️ Sửa trực tiếp (Track)
                                     </span>
                                   )}
 
@@ -882,29 +1013,30 @@ export function ContractReviewer() {
                                     className="text-[10px] text-slate-400 hover:text-[#C5A059] underline font-medium"
                                     title="Nhấn để đổi cách xử lý trong file Word"
                                   >
-                                    [{item.actionType === 'comment_only' ? 'Chuyển sang Track Change' : 'Chuyển sang Chỉ Comment'}]
+                                    [{item.actionType === 'comment_only' ? 'Đổi sang Track' : 'Đổi sang Comment'}]
                                   </button>
-
-                                  <h3 className="font-bold text-slate-100 text-xs w-full sm:w-auto mt-0.5 sm:mt-0 truncate">
-                                    {item.issue}
-                                  </h3>
                                 </div>
+
+                                <button
+                                  onClick={() => setDiffModalItem(item)}
+                                  className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-[#C5A059] px-2 py-0.5 rounded bg-[#0B1A2D] border border-[#1E3A5F] shrink-0"
+                                >
+                                  <Eye className="w-3 h-3" />
+                                  So sánh
+                                </button>
                               </div>
 
-                              <button
-                                onClick={() => setDiffModalItem(item)}
-                                className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-[#C5A059] px-2 py-0.5 rounded bg-[#0B1A2D] border border-[#1E3A5F] self-start sm:self-auto shrink-0"
-                              >
-                                <Eye className="w-3 h-3" />
-                                So sánh
-                              </button>
+                              {/* Tiêu đề lỗi */}
+                              <h3 className="font-bold text-slate-100 text-xs sm:text-sm pl-6">
+                                {item.issue}
+                              </h3>
                             </div>
 
                             {/* Lý do & Căn cứ đối chiếu */}
                             <div className="px-3.5 py-1.5 bg-[#0B1A2D] border-b border-[#1E3A5F] flex items-start gap-1.5 text-[11px] text-slate-400">
-                              <Info className="w-3 h-3 text-[#C5A059] shrink-0 mt-0.5" />
+                              <Info className="w-3.5 h-3.5 text-[#C5A059] shrink-0 mt-0.5" />
                               <span className="font-medium text-slate-300">
-                                <strong>Căn cứ:</strong> {item.reason}
+                                <strong className="text-[#C5A059]">Căn cứ ({item.departmentName || 'Pháp chế'}):</strong> {item.reason}
                               </span>
                             </div>
 
@@ -1014,7 +1146,7 @@ export function ContractReviewer() {
                     title="Tải biên bản soát xét dạng HTML/In ấn"
                   >
                     <Printer className="w-3.5 h-3.5 text-[#C5A059]" />
-                    <span>Biên bản</span>
+                    <span>Phiếu Soát Xét BLUEMARQ</span>
                   </button>
 
                   <button 

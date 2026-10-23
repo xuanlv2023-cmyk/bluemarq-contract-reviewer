@@ -9,6 +9,9 @@ export interface FindingToApply {
   reason: string;
   severity: 'high' | 'medium' | 'low';
   category?: 'legal_authority' | 'financial_boq' | 'submission_mismatch' | 'format_compliance';
+  department?: 'legal' | 'accounting' | 'cost_qs' | 'procurement' | 'pm_site';
+  departmentName?: string;
+  criterion?: string;
   actionType?: 'track_change' | 'comment_only';
   accepted?: boolean;
 }
@@ -125,6 +128,10 @@ export async function applyTrackChangesToDocx(
     // Kiểm tra xem đây là sửa đổi trực tiếp (track_change) hay chỉ chèn comment tư vấn (comment_only)
     const isCommentOnly = finding.actionType === 'comment_only';
 
+    const deptPrefix = finding.departmentName ? `[${finding.departmentName.toUpperCase()}] ` : '';
+    const critPrefix = finding.criterion ? `[${finding.criterion}] ` : '';
+    const statusPrefix = isCommentOnly ? '[ĐỀ XUẤT CÂN NHẮC]' : '[SAI LỆCH CĂN CỨ]';
+
     // A. Nội dung hiển thị trong Bong bóng Comment
     const commentTag = 
       `<w:comment w:id="${commentId}" w:author="${escapeXml(author)}" w:date="${dateStr}" w:initials="${escapeXml(initials)}">` +
@@ -136,7 +143,7 @@ export async function applyTrackChangesToDocx(
           `</w:r>` +
           `<w:r>` +
             `<w:rPr><w:b/><w:color w:val="${isCommentOnly ? 'D97706' : 'DC2626'}"/></w:rPr>` +
-            `<w:t xml:space="preserve">[${isCommentOnly ? 'ĐỀ XUẤT CÂN NHẮC' : 'SAI LỆCH CĂN CỨ'}] ${escapeXml(finding.issue)}: </w:t>` +
+            `<w:t xml:space="preserve">${escapeXml(deptPrefix)}${escapeXml(critPrefix)}${statusPrefix} ${escapeXml(finding.issue)}: </w:t>` +
           `</w:r>` +
           (isCommentOnly && suggTrimmed ? (
             `<w:r>` +
