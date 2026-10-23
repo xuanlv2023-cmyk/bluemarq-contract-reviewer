@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+﻿import React, { useState, useRef, useEffect } from 'react';
 import { 
   Scale, FileText, Building, Stamp, CheckCircle2, AlertCircle, 
   Loader2, Search, ArrowRight, XCircle, Info, UploadCloud, X, 
@@ -1253,65 +1253,45 @@ export function ContractReviewer() {
                                           </div>
 
                                           {/* So sánh Đoạn gốc vs Đề xuất sửa */}
-                                          {item.actionType === 'comment_only' ? (
-                                            <div className="p-2.5 sm:p-3 flex flex-col sm:flex-row gap-2.5 bg-[#0B1A2D]/50 text-xs">
-                                              <div className="flex-1 space-y-1">
-                                                <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                                                  <FileText className="w-3.5 h-3.5 text-slate-400" /> Văn bản gốc trong hợp đồng (Giữ nguyên)
-                                                </div>
-                                                <div className="p-2.5 bg-[#0A1626] rounded-lg border border-slate-700/60 shadow-inner">
-                                                  <p className="text-slate-100 font-serif text-[12px] leading-relaxed whitespace-pre-wrap">
-                                                    {item.original}
-                                                  </p>
-                                                </div>
+                                          {/* N?i dung d?i chi?u trn CNG 1 M?T N?N DUY NH?T (khng chia h?p con) */}
+                                          {/* So snh Do?n g?c vs D? xu?t: B? TR SNG SNG TRN CNG 1 N?N PH?NG (KHNG HP CON) */}
+                                          <div className="p-3 sm:p-4 bg-[#0B1A2D]/70 text-xs flex flex-col sm:flex-row gap-3 sm:gap-4 divide-y sm:divide-y-0 sm:divide-x divide-[#1E3A5F]/50">
+                                            {/* C?t Tri: Van b?n g?c */}
+                                            <div className="flex-1 space-y-1.5 min-w-0">
+                                              <div className="text-[10.5px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                                                <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                                <span>Văn bản gốc trong hợp đồng{item.actionType === 'comment_only' ? ' (Giữ nguyên)' : ''}:</span>
                                               </div>
-
-                                              <div className="hidden sm:flex flex-col items-center justify-center text-slate-500">
-                                                <ArrowRight className="w-3.5 h-3.5" />
-                                              </div>
-
-                                              <div className="flex-1 space-y-1">
-                                                <div className="text-[10px] font-semibold text-[#C5A059] uppercase tracking-wider flex items-center gap-1.5">
-                                                  <Info className="w-3.5 h-3.5 text-[#C5A059]" /> Ý kiến kiến nghị / Đề xuất (Chèn Comment)
-                                                </div>
-                                                <div className="p-2.5 bg-[#13253F] rounded-lg border border-[#C5A059]/40 shadow-sm">
-                                                  <p className="text-[#E2C785] font-serif text-[12px] leading-relaxed whitespace-pre-wrap">
-                                                    {item.suggestion}
-                                                  </p>
-                                                </div>
-                                              </div>
+                                              <p className={cn(
+                                                "text-slate-100 font-serif text-[12px] leading-relaxed pl-5 whitespace-pre-wrap",
+                                                item.actionType !== 'comment_only' && "line-through decoration-slate-400/80"
+                                              )}>
+                                                {item.original}
+                                              </p>
                                             </div>
-                                          ) : (
-                                            <div className="p-2.5 sm:p-3 flex flex-col sm:flex-row gap-2.5 bg-[#0B1A2D]/50 text-xs">
-                                              <div className="flex-1 space-y-1">
-                                                <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                                                  <FileText className="w-3.5 h-3.5 text-slate-400" /> Văn bản gốc trong hợp đồng
-                                                </div>
-                                                <div className="p-2.5 bg-[#0A1626] rounded-lg border border-slate-700/60 shadow-inner">
-                                                  <p className="text-slate-100 font-serif text-[12px] leading-relaxed line-through decoration-slate-400/80 whitespace-pre-wrap">
-                                                    {item.original}
-                                                  </p>
-                                                </div>
-                                              </div>
 
-                                              <div className="hidden sm:flex flex-col items-center justify-center text-slate-500">
-                                                <ArrowRight className="w-3.5 h-3.5" />
+                                            {/* C?t Ph?i: D? xu?t di?u ch?nh /  ki?n ki?n ngh? */}
+                                            <div className="flex-1 space-y-1.5 sm:pl-4 pt-2 sm:pt-0 min-w-0">
+                                              <div className="text-[10.5px] font-semibold text-[#C5A059] uppercase tracking-wider flex items-center gap-1.5">
+                                                {item.actionType === 'comment_only' ? (
+                                                  <>
+                                                    <Info className="w-3.5 h-3.5 text-[#C5A059] shrink-0" />
+                                                    <span>Ý kiến kiến nghị / Đề xuất (Chèn Comment):</span>
+                                                  </>
+                                                ) : (
+                                                  <>
+                                                    <CheckCircle2 className="w-3.5 h-3.5 text-[#C5A059] shrink-0" />
+                                                    <span>Đề xuất điều chỉnh chuẩn (Sẽ chèn Track):</span>
+                                                  </>
+                                                )}
                                               </div>
-
-                                              <div className="flex-1 space-y-1">
-                                                <div className="text-[10px] font-semibold text-[#C5A059] uppercase tracking-wider flex items-center gap-1.5">
-                                                  <CheckCircle2 className="w-3.5 h-3.5 text-[#C5A059]" /> Đề xuất điều chỉnh chuẩn (Sẽ chèn Track)
-                                                </div>
-                                                <div className="p-2.5 bg-[#13253F] rounded-lg border border-[#C5A059]/40 shadow-sm">
-                                                  <p className="text-[#E2C785] font-serif text-[12px] leading-relaxed font-medium whitespace-pre-wrap">
-                                                    {item.suggestion}
-                                                  </p>
-                                                </div>
-                                              </div>
+                                              <p className="text-[#E2C785] font-serif text-[12px] leading-relaxed font-medium pl-5 whitespace-pre-wrap">
+                                                {item.suggestion}
+                                              </p>
                                             </div>
-                                          )}
-                                        </div>
-                                      );
+                                          </div>
+                                          </div>
+                                        );
                                     })
                                   )}
                                 </div>
