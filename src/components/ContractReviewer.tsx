@@ -4,12 +4,12 @@ import {
   Loader2, Search, ArrowRight, XCircle, Info, UploadCloud, X, 
   File, Plus, FileSymlink, FileArchive, FileImage, Settings, Key, Check, DownloadCloud,
   Calculator, CheckSquare, Square, Filter, FileSpreadsheet, Eye, Printer, Trash2,
-  UserCheck, RefreshCw
+  UserCheck, RefreshCw, ChevronDown, ChevronUp, Layers
 } from 'lucide-react';
 import { cn } from '../utils';
 import { processFile, ProcessedDoc } from '../lib/file-extractor';
 import { buildContractAuditPrompt } from '../lib/gemini-prompts';
-import { downloadTrackedDocx, FindingToApply } from '../lib/docx-track-changes';
+import { downloadTrackedDocx, FindingToApply, DEPT_TITLE_MAP } from '../lib/docx-track-changes';
 import { downloadAuditReport, AuditReportData } from '../lib/report-generator';
 import { executeContractReview, AVAILABLE_MODELS, formatGeminiErrorMessage } from '../lib/gemini-service';
 
@@ -167,7 +167,9 @@ export function ContractReviewer() {
   const [severityFilter, setSeverityFilter] = useState<string>('all');
 
   // Cấu hình người dùng & Model
-  const [reviewerName, setReviewerName] = useState(() => localStorage.getItem('bmq_reviewer_name') || 'Ban Pháp Chế');
+  const [reviewerName, setReviewerName] = useState(() => localStorage.getItem('bmq_reviewer_name') || 'xuanlv');
+  const [reviewerDepartment, setReviewerDepartment] = useState<string>(() => localStorage.getItem('bmq_reviewer_department') || 'legal');
+  const [collapsedDepts, setCollapsedDepts] = useState<Record<string, boolean>>({});
   const [selectedModel, setSelectedModel] = useState<string>('gemini-3.8-flash');
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('bmq_gemini_api_key') || '');
   const [showConfigModal, setShowConfigModal] = useState(false);
@@ -175,10 +177,18 @@ export function ContractReviewer() {
   // Modal xem chi tiết so sánh
   const [diffModalItem, setDiffModalItem] = useState<FindingWithSelection | null>(null);
 
-  // Lưu tên người soát xét vào localStorage
+  // Lưu tên và phòng ban người soát xét vào localStorage
   useEffect(() => {
     localStorage.setItem('bmq_reviewer_name', reviewerName);
   }, [reviewerName]);
+
+  useEffect(() => {
+    localStorage.setItem('bmq_reviewer_department', reviewerDepartment);
+  }, [reviewerDepartment]);
+
+  const toggleDeptCollapse = (deptKey: string) => {
+    setCollapsedDepts(prev => ({ ...prev, [deptKey]: !prev[deptKey] }));
+  };
 
   // Lưu API Key vào localStorage
   const handleSaveApiKey = (newKey: string) => {
@@ -380,15 +390,30 @@ export function ContractReviewer() {
     setFindings(findings.map(f => ({ ...f, accepted: select })));
   };
 
-  // Tải xuống file Word có Track Changes & Comments
-  const handleDownloadDocx = async () => {
+  // Tải xuống file Word có Track Changes & Comments (hỗ trợ xuất riêng phòng ban hoặc tổng hợp)
+  const handleDownloadDocx = async (scope: 'my_department' | 'all' = 'my_department') => {
     if (!hopDongFile || !findings) return;
     try {
-      const outputName = hopDongFile.name.replace(/\.docx$/i, '') + `_Da_Soat_Xet_${reviewerName.replace(/\s+/g, '_')}.docx`;
-      const applied = await downloadTrackedDocx(hopDongFile, findings, reviewerName, outputName);
-      const trackCount = findings.filter(f => f.accepted && f.actionType !== 'comment_only').length;
-      const commentCount = findings.filter(f => f.accepted && f.actionType === 'comment_only').length;
-      alert(`Đã xuất thành công file Word với ${applied} điểm ghi nhận dưới tên [${reviewerName}]!\n• ${trackCount} nội dung sai lệch được gạch đỏ và sửa trực tiếp\n• ${commentCount} ý kiến đề xuất được gắn bóng Comment bên lề để Người duyệt quyết định.`);
+      const deptTitle = DEPT_TITLE_MAP[reviewerDepartment] || 'Ban Pháp Chế';
+      const scopeLabel = scope === 'my_department' ? deptTitle.replace(/\s+/g, '_') : 'Tong_Hop_5_Phong_Ban';
+      const outputName = hopDongFile.name.replace(/\.docx$/i, '') + `_Da_Soat_Xet_${reviewerName.replace(/\s+/g, '_')}_${scopeLabel}.docx`;
+      
+      const applied = await downloadTrackedDocx(
+        hopDongFile, 
+        findings, 
+        reviewerName, 
+        reviewerDepartment, 
+        scope, 
+        outputName
+      );
+
+      const targetFindings = scope === 'my_department' 
+        ? findings.filter(f => f.accepted && (f.department || 'legal') === reviewerDepartment)
+        : findings.filter(f => f.accepted);
+      const trackCount = targetFindings.filter(f => f.actionType !== 'comment_only').length;
+      const commentCount = targetFindings.filter(f => f.actionType === 'comment_only').length;
+
+      alert(`Đã xuất thành công file Word cho [${scope === 'my_department' ? deptTitle : 'Tổng Hợp 5 Phòng Ban'}]!\n• Tác giả: ${reviewerName} (${deptTitle})\n• ${trackCount} nội dung gạch sửa trực tiếp (Track Changes)\n• ${commentCount} ý kiến đề xuất gắn bóng Comment bên lề.`);
     } catch (err: any) {
       console.error(err);
       alert(`Lỗi khi tạo Track Changes: ${err.message}`);
@@ -518,29 +543,43 @@ export function ContractReviewer() {
             {/* Danh sách tài liệu: Có THANH CUỘN ĐỘC LẬP */}
             <div className="flex-1 min-h-0 overflow-y-auto p-3.5 sm:p-4 space-y-3.5">
               
-              {/* THÔNG TIN NGƯỜI SOÁT XÉT */}
-              <div className="bg-[#0B1A2D]/80 rounded-xl border border-[#1E3A5F] p-3 sm:p-3.5 shadow-md">
-                <div className="flex items-center justify-between mb-1.5">
+              {/* THÔNG TIN NGƯỜI SOÁT XÉT & PHÒNG BAN TRỰC THUỘC */}
+              <div className="bg-[#0B1A2D]/80 rounded-xl border border-[#1E3A5F] p-3 sm:p-3.5 shadow-md space-y-2">
+                <div className="flex items-center justify-between mb-0.5">
                   <label htmlFor="leftReviewerInput" className="text-xs font-bold text-[#C5A059] uppercase tracking-wider flex items-center gap-1.5">
                     <UserCheck className="w-3.5 h-3.5 text-[#C5A059]" />
-                    Người thực hiện soát xét
+                    Người soát xét & Phòng ban
                   </label>
                   <span className="text-[10px] bg-[#13253F] border border-[#1E3A5F] text-[#C5A059] px-2 py-0.5 rounded font-mono">
                     Tác giả Track Changes Word
                   </span>
                 </div>
-                <div className="relative">
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <input
                     id="leftReviewerInput"
                     type="text"
                     value={reviewerName}
                     onChange={(e) => setReviewerName(e.target.value)}
-                    placeholder="VD: Nguyễn Văn A - Ban Pháp Chế"
+                    placeholder="Họ và tên người soát xét..."
                     className="w-full bg-[#13253F] border border-[#1E3A5F] focus:border-[#C5A059] rounded-lg px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none transition-colors"
                   />
+
+                  <select
+                    value={reviewerDepartment}
+                    onChange={(e) => setReviewerDepartment(e.target.value)}
+                    className="w-full bg-[#13253F] border border-[#1E3A5F] focus:border-[#C5A059] rounded-lg px-2.5 py-2 text-xs text-slate-100 focus:outline-none transition-colors"
+                  >
+                    <option value="legal">🏛️ Ban Pháp Chế</option>
+                    <option value="accounting">💰 Phòng Kế Toán</option>
+                    <option value="cost_qs">📊 Phòng QLCP & Khối Lượng</option>
+                    <option value="procurement">📦 Ban Chọn Thầu - Cung Ứng</option>
+                    <option value="pm_site">🏗️ Ban Điều Hành Dự Án</option>
+                  </select>
                 </div>
-                <p className="text-[10.5px] text-slate-400 mt-1.5 leading-tight">
-                  Tên này sẽ tự động hiển thị tại các vết gạch đỏ xóa chữ, chữ chèn mới và bong bóng Comment bên lề file Word.
+
+                <p className="text-[10.5px] text-slate-400 leading-tight">
+                  Tác giả trong Word: <strong className="text-slate-200">{reviewerName || 'Người soát xét'} ({DEPT_TITLE_MAP[reviewerDepartment] || 'Ban Pháp Chế'})</strong>.
                 </p>
               </div>
 
@@ -883,41 +922,7 @@ export function ContractReviewer() {
 
                   <button 
                     onClick={() => toggleSelectAll(true)}
-                    className="text-xs text-[#C5A059] hover:underline px-1 py-0.5"
-                  >
-                    Chọn hết
-                  </button>
-                  <span className="text-slate-600">|</span>
-                  <button 
-                    onClick={() => toggleSelectAll(false)}
-                    className="text-xs text-slate-400 hover:underline px-1 py-0.5"
-                  >
-                    Bỏ chọn
-                  </button>
-                </div>
-              </div>
-            )}
-            
-            {/* BODY NỘI DUNG: CÓ THANH CUỘN ĐỘC LẬP */}
-            <div className="p-4 sm:p-5 flex-1 min-h-0 overflow-y-auto bg-[#0B1A2D] relative">
-              
-              {/* 1. TRẠNG THÁI ĐANG XỬ LÝ (LOADING) */}
-              {isLoading ? (
-                <div className="h-full flex flex-col items-center justify-center text-[#C5A059] min-h-[360px]">
-                  <Loader2 className="w-10 h-10 animate-spin mb-3 text-[#C5A059]" />
-                  <p className="text-sm font-bold tracking-wider text-slate-100 uppercase">
-                    BLUEMARQ AUDIT ENGINE
-                  </p>
-                  <p className="text-xs text-[#C5A059] mt-2 font-medium max-w-md text-center animate-pulse">
-                    {loadingStep || 'Đang thực thi thuật toán đối chiếu pháp lý chuyên sâu...'}
-                  </p>
-                  <div className="w-48 h-1 bg-[#1E3A5F] rounded-full mt-5 overflow-hidden">
-                    <div className="h-full bg-[#C5A059] animate-[shimmer_1.5s_infinite]"></div>
-                  </div>
-                </div>
-              ) : findings ? (
-                
-                // 2. TRẠNG THÁI ĐÃ CÓ KẾT QUẢ
+                    className="text-                // 2. TRẠNG THÁI ĐÃ CÓ KẾT QUẢ - GOM NHÓM THEO 5 PHÒNG BAN CHUẨN BLUEMARQ
                 <div className="space-y-4">
                   {filteredFindings.length === 0 ? (
                     <div className="bg-[#13253F] border border-[#1E3A5F] p-6 rounded-xl flex flex-col items-center justify-center text-center space-y-2.5 shadow-lg">
@@ -932,175 +937,255 @@ export function ContractReviewer() {
                       </p>
                     </div>
                   ) : (
-                    <div className="space-y-3.5">
-                      {filteredFindings.map((item) => {
-                        const isHigh = item.severity === 'high';
-                        const isMed = item.severity === 'medium';
-                        const riskBadgeClass = isHigh 
-                          ? 'text-red-400 bg-red-950/60 border-red-700/60' 
-                          : isMed 
-                            ? 'text-orange-400 bg-orange-950/60 border-orange-700/60' 
-                            : 'text-blue-400 bg-blue-950/60 border-blue-700/60';
+                    <div className="space-y-4">
+                      {[
+                        { 
+                          key: 'procurement', 
+                          title: 'Ban Chọn Thầu - Cung Ứng', 
+                          icon: '📦', 
+                          standardCriteria: '13 tiêu chí: Mẫu HĐ, đối tượng gói thầu, chủng loại vật tư, điều kiện thương mại' 
+                        },
+                        { 
+                          key: 'cost_qs', 
+                          title: 'Phòng Quản Lý Chi Phí & Khối Lượng (QS)', 
+                          icon: '📊', 
+                          standardCriteria: '13 tiêu chí: BOQ dự toán, đơn giá, tiến độ thi công, bảo lãnh tạm ứng' 
+                        },
+                        { 
+                          key: 'pm_site', 
+                          title: 'Ban Điều Hành Dự Án', 
+                          icon: '🏗️', 
+                          standardCriteria: 'Hiện trường, an toàn lao động HSE, tiêu chuẩn nghiệm thu sản phẩm' 
+                        },
+                        { 
+                          key: 'accounting', 
+                          title: 'Phòng Kế Toán', 
+                          icon: '💰', 
+                          standardCriteria: '6 tiêu chí: Bản chất tạm ứng/tiền cọc, hóa đơn VAT, chứng từ giải ngân' 
+                        },
+                        { 
+                          key: 'legal', 
+                          title: 'Ban Pháp Chế', 
+                          icon: '🏛️', 
+                          standardCriteria: '14 tiêu chí: ĐKKD 2 bên, ủy quyền, thẩm quyền, phạt 8%, tranh chấp, bảo mật' 
+                        },
+                      ]
+                        .filter(dept => departmentFilter === 'all' || departmentFilter === dept.key)
+                        .map(dept => {
+                          const deptItems = filteredFindings.filter(f => (f.department || 'legal') === dept.key);
+                          const isCollapsed = collapsedDepts[dept.key] === true;
+                          const hasIssues = deptItems.length > 0;
+                          const trackInDept = deptItems.filter(f => f.actionType !== 'comment_only').length;
+                          const commentInDept = deptItems.filter(f => f.actionType === 'comment_only').length;
 
-                        const deptBadgeColor = 
-                          item.department === 'accounting' ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700/60' :
-                          item.department === 'cost_qs' ? 'bg-amber-950/80 text-amber-300 border-amber-700/60' :
-                          item.department === 'procurement' ? 'bg-purple-950/80 text-purple-300 border-purple-700/60' :
-                          item.department === 'pm_site' ? 'bg-indigo-950/80 text-indigo-300 border-indigo-700/60' :
-                          'bg-blue-950/80 text-blue-300 border-blue-700/60';
+                          return (
+                            <div 
+                              key={dept.key}
+                              className="bg-[#13253F] rounded-xl border border-[#1E3A5F] overflow-hidden shadow-md"
+                            >
+                              {/* Header Accordion Phòng Ban */}
+                              <div 
+                                onClick={() => toggleDeptCollapse(dept.key)}
+                                className="px-4 py-3 bg-[#10223A] border-b border-[#1E3A5F] flex items-center justify-between cursor-pointer hover:bg-[#162C4B] transition-colors select-none"
+                              >
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <span className="text-base shrink-0">{dept.icon}</span>
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <h3 className="text-xs sm:text-sm font-bold text-slate-100 uppercase tracking-wide">
+                                        {dept.title}
+                                      </h3>
+                                      <span className="text-xs text-slate-400 font-mono">
+                                        ({deptItems.length} phát hiện{hasIssues ? `: ${trackInDept} Track, ${commentInDept} Comment` : ''})
+                                      </span>
+                                    </div>
+                                    <p className="text-[10.5px] text-slate-400 truncate hidden sm:block">
+                                      {dept.standardCriteria}
+                                    </p>
+                                  </div>
+                                </div>
 
-                        const deptIcon = 
-                          item.department === 'accounting' ? '💰' :
-                          item.department === 'cost_qs' ? '📊' :
-                          item.department === 'procurement' ? '📦' :
-                          item.department === 'pm_site' ? '🏗️' : '🏛️';
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <span className={cn(
+                                    "px-2.5 py-0.5 rounded text-[10px] font-bold border",
+                                    !hasIssues 
+                                      ? "bg-emerald-950/70 text-emerald-300 border-emerald-800/60" 
+                                      : "bg-red-950/70 text-red-300 border-red-800/60"
+                                  )}>
+                                    {!hasIssues ? '✓ Đạt / Đồng ý' : `⚠️ Cần điều chỉnh (${deptItems.length})`}
+                                  </span>
 
-                        return (
-                          <div 
-                            key={item.id} 
-                            className={cn(
-                              "bg-[#13253F] rounded-xl shadow-md border transition-all duration-200 overflow-hidden",
-                              item.accepted ? "border-[#1E3A5F] hover:border-[#C5A059]/60" : "border-slate-800 opacity-60"
-                            )}
-                          >
-                            {/* Header Card Lỗi */}
-                            <div className="px-3.5 py-2.5 bg-[#13253F] border-b border-[#1E3A5F] flex flex-col gap-2">
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="flex items-center gap-2 flex-wrap flex-1">
-                                  <button
-                                    onClick={() => toggleFindingAccepted(item.id)}
-                                    className="text-slate-400 hover:text-[#C5A059] transition-colors shrink-0"
-                                    title={item.accepted ? "Nhấn để bỏ qua phát hiện này" : "Nhấn để áp dụng"}
-                                  >
-                                    {item.accepted ? (
-                                      <CheckSquare className="w-4 h-4 text-[#C5A059]" />
-                                    ) : (
-                                      <Square className="w-4 h-4" />
-                                    )}
+                                  <button type="button" className="text-slate-400 hover:text-white p-1">
+                                    {isCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
                                   </button>
+                                </div>
+                              </div>
 
-                                  {/* Badge Phòng ban */}
-                                  <span className={cn("px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wide border flex items-center gap-1", deptBadgeColor)}>
-                                    {deptIcon} {item.departmentName || 'Ban Pháp Chế'}
-                                  </span>
-
-                                  {/* Tiêu chí */}
-                                  {item.criterion && (
-                                    <span className="text-[10px] text-slate-300 bg-[#0B1A2D] px-2 py-0.5 rounded border border-[#1E3A5F] font-medium">
-                                      Tiêu chí: <strong>{item.criterion}</strong>
-                                    </span>
-                                  )}
-
-                                  {/* Mức độ rủi ro */}
-                                  <span className={cn("px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border", riskBadgeClass)}>
-                                    {isHigh ? 'Nghiêm trọng' : isMed ? 'Cần lưu ý' : 'Lỗi nhỏ'}
-                                  </span>
-
-                                  {/* Hình thức */}
-                                  {item.actionType === 'comment_only' ? (
-                                    <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-amber-950/80 text-amber-300 border border-amber-700/60 inline-flex items-center gap-1">
-                                      💬 Chỉ Comment
-                                    </span>
+                              {/* Danh sách các phát hiện bên trong phòng ban này */}
+                              {!isCollapsed && (
+                                <div className="p-3 sm:p-3.5 space-y-3 bg-[#0B1A2D]/60">
+                                  {deptItems.length === 0 ? (
+                                    <div className="p-3 bg-[#13253F]/40 border border-[#1E3A5F]/50 rounded-lg text-xs text-slate-400 italic flex items-center gap-2">
+                                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                                      <span>Không phát hiện sai lệch nào thuộc thẩm quyền của {dept.title}. Nội dung hợp đồng phù hợp.</span>
+                                    </div>
                                   ) : (
-                                    <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-emerald-950/80 text-emerald-300 border border-emerald-700/60 inline-flex items-center gap-1">
-                                      ✍️ Sửa trực tiếp (Track)
-                                    </span>
+                                    deptItems.map((item, idx) => {
+                                      const isHigh = item.severity === 'high';
+                                      const isMed = item.severity === 'medium';
+                                      const riskBadgeClass = isHigh 
+                                        ? 'text-red-400 bg-red-950/60 border-red-700/60' 
+                                        : isMed 
+                                          ? 'text-orange-400 bg-orange-950/60 border-orange-700/60' 
+                                          : 'text-blue-400 bg-blue-950/60 border-blue-700/60';
+
+                                      return (
+                                        <div 
+                                          key={item.id}
+                                          className={cn(
+                                            "bg-[#13253F] rounded-lg border transition-all duration-200 overflow-hidden",
+                                            item.accepted ? "border-[#1E3A5F] hover:border-[#C5A059]/60" : "border-slate-800 opacity-60"
+                                          )}
+                                        >
+                                          {/* Card Top Header */}
+                                          <div className="px-3 py-2 bg-[#10223A] border-b border-[#1E3A5F] flex flex-col gap-1.5">
+                                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                                              <div className="flex items-center gap-2 flex-wrap">
+                                                <button
+                                                  onClick={() => toggleFindingAccepted(item.id)}
+                                                  className="text-slate-400 hover:text-[#C5A059] transition-colors shrink-0"
+                                                  title={item.accepted ? "Nhấn để bỏ qua phát hiện này" : "Nhấn để áp dụng"}
+                                                >
+                                                  {item.accepted ? (
+                                                    <CheckSquare className="w-4 h-4 text-[#C5A059]" />
+                                                  ) : (
+                                                    <Square className="w-4 h-4" />
+                                                  )}
+                                                </button>
+
+                                                <span className="text-xs font-mono font-bold text-slate-400">
+                                                  #{idx + 1}
+                                                </span>
+
+                                                {item.criterion && (
+                                                  <span className="text-[10px] text-slate-300 bg-[#0B1A2D] px-2 py-0.5 rounded border border-[#1E3A5F] font-medium">
+                                                    Tiêu chí: <strong>{item.criterion}</strong>
+                                                  </span>
+                                                )}
+
+                                                <span className={cn("px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border", riskBadgeClass)}>
+                                                  {isHigh ? 'Nghiêm trọng' : isMed ? 'Cần lưu ý' : 'Lỗi nhỏ'}
+                                                </span>
+
+                                                {item.actionType === 'comment_only' ? (
+                                                  <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-amber-950/80 text-amber-300 border border-amber-700/60 inline-flex items-center gap-1">
+                                                    💬 Chỉ Comment
+                                                  </span>
+                                                ) : (
+                                                  <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-emerald-950/80 text-emerald-300 border border-emerald-700/60 inline-flex items-center gap-1">
+                                                    ✍️ Sửa trực tiếp (Track)
+                                                  </span>
+                                                )}
+
+                                                <button
+                                                  type="button"
+                                                  onClick={() => toggleActionType(item.id)}
+                                                  className="text-[10px] text-slate-400 hover:text-[#C5A059] underline font-medium"
+                                                  title="Nhấn để đổi cách xử lý trong file Word"
+                                                >
+                                                  [{item.actionType === 'comment_only' ? 'Đổi sang Track' : 'Đổi sang Comment'}]
+                                                </button>
+                                              </div>
+
+                                              <button
+                                                onClick={() => setDiffModalItem(item)}
+                                                className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-[#C5A059] px-2 py-0.5 rounded bg-[#0B1A2D] border border-[#1E3A5F] shrink-0"
+                                              >
+                                                <Eye className="w-3 h-3" />
+                                                So sánh
+                                              </button>
+                                            </div>
+
+                                            <h4 className="font-bold text-slate-100 text-xs sm:text-sm pl-6">
+                                              {item.issue}
+                                            </h4>
+                                          </div>
+
+                                          {/* Lý do & Căn cứ kiểm soát */}
+                                          <div className="px-3 py-1.5 bg-[#0B1A2D] border-b border-[#1E3A5F] flex items-start gap-1.5 text-[11px] text-slate-300">
+                                            <Info className="w-3.5 h-3.5 text-[#C5A059] shrink-0 mt-0.5" />
+                                            <span>
+                                              <strong className="text-[#C5A059]">Căn cứ đối chiếu:</strong> {item.reason}
+                                            </span>
+                                          </div>
+
+                                          {/* So sánh Đoạn gốc vs Đề xuất sửa */}
+                                          {item.actionType === 'comment_only' ? (
+                                            <div className="p-2.5 sm:p-3 flex flex-col sm:flex-row gap-2.5 bg-[#0B1A2D]/40 text-xs">
+                                              <div className="flex-1 space-y-1">
+                                                <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                                                  <FileText className="w-3 h-3 text-slate-400" /> Đoạn hợp đồng gốc liên quan (Giữ nguyên trong file Word)
+                                                </div>
+                                                <div className="p-2 bg-slate-900/50 rounded border border-slate-700/40">
+                                                  <p className="text-slate-300 font-serif text-[11px] leading-relaxed whitespace-pre-wrap">
+                                                    {item.original}
+                                                  </p>
+                                                </div>
+                                              </div>
+
+                                              <div className="hidden sm:flex flex-col items-center justify-center text-slate-600">
+                                                <ArrowRight className="w-3.5 h-3.5" />
+                                              </div>
+
+                                              <div className="flex-1 space-y-1">
+                                                <div className="text-[9px] font-bold text-amber-400 uppercase tracking-widest flex items-center gap-1">
+                                                  <Info className="w-3 h-3 text-amber-400" /> Ý kiến kiến nghị / Đề xuất (Chỉ chèn bóng Comment bên lề)
+                                                </div>
+                                                <div className="p-2 bg-amber-950/20 rounded border border-amber-900/40">
+                                                  <p className="text-amber-200 font-serif text-[11px] leading-relaxed whitespace-pre-wrap">
+                                                    {item.suggestion}
+                                                  </p>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          ) : (
+                                            <div className="p-2.5 sm:p-3 flex flex-col sm:flex-row gap-2.5 bg-[#0B1A2D]/40 text-xs">
+                                              <div className="flex-1 space-y-1">
+                                                <div className="text-[9px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1">
+                                                  <FileText className="w-3 h-3 text-red-400" /> Bản thảo gốc (Sẽ gạch đỏ xóa bỏ)
+                                                </div>
+                                                <div className="p-2 bg-red-950/20 rounded border border-red-900/30">
+                                                  <p className="text-red-400/90 font-serif text-[11px] leading-relaxed line-through decoration-red-500/50 italic whitespace-pre-wrap">
+                                                    {item.original}
+                                                  </p>
+                                                </div>
+                                              </div>
+
+                                              <div className="hidden sm:flex flex-col items-center justify-center text-slate-600">
+                                                <ArrowRight className="w-3.5 h-3.5" />
+                                              </div>
+
+                                              <div className="flex-1 space-y-1">
+                                                <div className="text-[9px] font-bold text-emerald-400 uppercase tracking-widest flex items-center gap-1">
+                                                  <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Nội dung chuẩn thay thế (Sẽ chèn chữ mới)
+                                                </div>
+                                                <div className="p-2 bg-emerald-950/30 rounded border border-emerald-900/50">
+                                                  <p className="text-emerald-300 font-serif text-[11px] leading-relaxed font-semibold whitespace-pre-wrap">
+                                                    {item.suggestion}
+                                                  </p>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })
                                   )}
-
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleActionType(item.id)}
-                                    className="text-[10px] text-slate-400 hover:text-[#C5A059] underline font-medium"
-                                    title="Nhấn để đổi cách xử lý trong file Word"
-                                  >
-                                    [{item.actionType === 'comment_only' ? 'Đổi sang Track' : 'Đổi sang Comment'}]
-                                  </button>
                                 </div>
-
-                                <button
-                                  onClick={() => setDiffModalItem(item)}
-                                  className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-[#C5A059] px-2 py-0.5 rounded bg-[#0B1A2D] border border-[#1E3A5F] shrink-0"
-                                >
-                                  <Eye className="w-3 h-3" />
-                                  So sánh
-                                </button>
-                              </div>
-
-                              {/* Tiêu đề lỗi */}
-                              <h3 className="font-bold text-slate-100 text-xs sm:text-sm pl-6">
-                                {item.issue}
-                              </h3>
+                              )}
                             </div>
-
-                            {/* Lý do & Căn cứ đối chiếu */}
-                            <div className="px-3.5 py-1.5 bg-[#0B1A2D] border-b border-[#1E3A5F] flex items-start gap-1.5 text-[11px] text-slate-400">
-                              <Info className="w-3.5 h-3.5 text-[#C5A059] shrink-0 mt-0.5" />
-                              <span className="font-medium text-slate-300">
-                                <strong className="text-[#C5A059]">Căn cứ ({item.departmentName || 'Pháp chế'}):</strong> {item.reason}
-                              </span>
-                            </div>
-
-                            {/* So sánh Đoạn gốc vs Đề xuất sửa */}
-                            {item.actionType === 'comment_only' ? (
-                              <div className="p-3 flex flex-col sm:flex-row gap-3 bg-[#0B1A2D]/40 text-xs">
-                                <div className="flex-1 space-y-1">
-                                  <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
-                                    <FileText className="w-3 h-3 text-slate-400" /> Đoạn hợp đồng gốc liên quan (Giữ nguyên trong file Word)
-                                  </div>
-                                  <div className="p-2.5 bg-slate-900/40 rounded-lg border border-slate-700/40">
-                                    <p className="text-slate-300 font-serif text-[11px] leading-relaxed whitespace-pre-wrap">
-                                      {item.original}
-                                    </p>
-                                  </div>
-                                </div>
-
-                                <div className="hidden sm:flex flex-col items-center justify-center text-slate-600">
-                                  <ArrowRight className="w-3.5 h-3.5" />
-                                </div>
-
-                                <div className="flex-1 space-y-1">
-                                  <div className="text-[9px] font-bold text-amber-400 uppercase tracking-widest flex items-center gap-1">
-                                    <Info className="w-3 h-3 text-amber-400" /> Ý kiến kiến nghị / Đề xuất (Chỉ chèn bóng Comment bên lề)
-                                  </div>
-                                  <div className="p-2.5 bg-amber-950/20 rounded-lg border border-amber-900/40">
-                                    <p className="text-amber-200 font-serif text-[11px] leading-relaxed whitespace-pre-wrap">
-                                      {item.suggestion}
-                                    </p>
-                                  </div>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="p-3 flex flex-col sm:flex-row gap-3 bg-[#0B1A2D]/40 text-xs">
-                                <div className="flex-1 space-y-1">
-                                  <div className="text-[9px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1">
-                                    <FileText className="w-3 h-3 text-red-400" /> Bản thảo gốc (Sẽ gạch đỏ xóa bỏ)
-                                  </div>
-                                  <div className="p-2.5 bg-red-950/20 rounded-lg border border-red-900/30">
-                                    <p className="text-red-400/90 font-serif text-[11px] leading-relaxed line-through decoration-red-500/50 italic whitespace-pre-wrap">
-                                      {item.original}
-                                    </p>
-                                  </div>
-                                </div>
-
-                                <div className="hidden sm:flex flex-col items-center justify-center text-slate-600">
-                                  <ArrowRight className="w-3.5 h-3.5" />
-                                </div>
-
-                                <div className="flex-1 space-y-1">
-                                  <div className="text-[9px] font-bold text-emerald-400 uppercase tracking-widest flex items-center gap-1">
-                                    <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Nội dung chuẩn thay thế (Sẽ chèn chữ mới)
-                                  </div>
-                                  <div className="p-2.5 bg-emerald-950/30 rounded-lg border border-emerald-900/50">
-                                    <p className="text-emerald-300 font-serif text-[11px] leading-relaxed font-semibold whitespace-pre-wrap">
-                                      {item.suggestion}
-                                    </p>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
                     </div>
                   )}
                 </div>
@@ -1116,7 +1201,7 @@ export function ContractReviewer() {
                       Trung Tâm Đối Chiếu Pháp Chế BLUEMARQ
                     </p>
                     <p className="text-[11px] text-slate-400 leading-relaxed">
-                      Tải lên các tài liệu căn cứ ở cột bên trái và bấm <strong className="text-[#C5A059]">Bắt đầu Soát xét</strong> để AI đối chiếu ma trận.
+                      Tải lên các tài liệu căn cứ ở cột bên trái và bấm <strong className="text-[#C5A059]">Bắt đầu Soát xét</strong> để AI đối chiếu ma trận 5 phòng ban.
                     </p>
                   </div>
                 </div>
@@ -1126,42 +1211,42 @@ export function ContractReviewer() {
             {/* FOOTER CỐ ĐỊNH Ở ĐÁY CỘT PHẢI: TOOLBAR XUẤT FILE HOÀN CHỈNH */}
             {findings && findings.length > 0 && (
               <div className="p-3 bg-[#0E1F35] border-t border-[#1E3A5F] shrink-0 flex flex-col sm:flex-row items-center justify-between gap-2.5 shadow-xl">
-                <div className="w-full sm:max-w-[280px]">
-                  <div className="flex items-center gap-1.5 bg-[#13253F] border border-[#1E3A5F] rounded-lg px-2.5 py-1 focus-within:border-[#C5A059]">
-                    <UserCheck className="w-3.5 h-3.5 text-[#C5A059] shrink-0" />
-                    <input 
-                      type="text"
-                      value={reviewerName}
-                      onChange={(e) => setReviewerName(e.target.value)}
-                      placeholder="Tên người soát xét..."
-                      className="w-full bg-transparent border-none text-slate-200 text-xs focus:outline-none placeholder:text-slate-500"
-                    />
-                  </div>
+                <div className="flex items-center gap-2 text-xs text-slate-300">
+                  <UserCheck className="w-4 h-4 text-[#C5A059] shrink-0" />
+                  <span>Tác giả: <strong className="text-white">{reviewerName || 'xuanlv'}</strong> (<span className="text-[#C5A059] font-semibold">{DEPT_TITLE_MAP[reviewerDepartment] || 'Ban Pháp Chế'}</span>)</span>
                 </div>
 
-                <div className="flex items-center gap-2 w-full sm:w-auto">
+                <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto">
+                  {/* NÚT CHÍNH: XUẤT WORD ĐÚNG THEO PHÒNG BAN CỦA NGƯỜI DÙNG */}
+                  <button
+                    onClick={() => handleDownloadDocx('my_department')}
+                    className="flex-1 sm:flex-initial bg-gradient-to-r from-[#C5A059] to-[#D4AF37] hover:from-[#D4AF37] hover:to-[#C5A059] text-[#0B1A2D] font-extrabold text-xs py-2 px-3.5 rounded-lg shadow-md hover:shadow-[0_4px_16px_rgba(197,160,89,0.4)] transition-all flex items-center justify-center gap-1.5"
+                    title={`Xuất file Word chỉ gồm các điểm Track Changes và Comments của ${DEPT_TITLE_MAP[reviewerDepartment]}`}
+                  >
+                    <DownloadCloud className="w-3.5 h-3.5" />
+                    <span>Xuất Word ({DEPT_TITLE_MAP[reviewerDepartment] || 'Phòng ban'})</span>
+                  </button>
+
+                  {/* NÚT PHỤ: XUẤT WORD TỔNG HỢP CẢ 5 PHÒNG BAN */}
+                  <button
+                    onClick={() => handleDownloadDocx('all')}
+                    className="flex-1 sm:flex-initial bg-[#13253F] hover:bg-[#1E3A5F] border border-[#1E3A5F] text-slate-200 font-semibold text-xs py-2 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5"
+                    title="Xuất file Word tổng hợp toàn bộ nhận xét của cả 5 phòng ban"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-[#C5A059]" />
+                    <span>Xuất Word Tổng Hợp</span>
+                  </button>
+
+                  {/* NÚT BIÊN BẢN: PHIẾU SOÁT XÉT BLUEMARQ */}
                   <button
                     onClick={handleDownloadReport}
-                    className="flex-1 sm:flex-initial bg-[#13253F] hover:bg-[#1E3A5F] border border-[#1E3A5F] text-slate-200 font-semibold text-xs py-1.5 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5"
-                    title="Tải biên bản soát xét dạng HTML/In ấn"
+                    className="flex-1 sm:flex-initial bg-[#13253F] hover:bg-[#1E3A5F] border border-[#1E3A5F] text-slate-200 font-semibold text-xs py-2 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5"
+                    title="Tải Phiếu Soát Xét chuẩn Tập đoàn BLUEMARQ (HTML / In ấn)"
                   >
                     <Printer className="w-3.5 h-3.5 text-[#C5A059]" />
                     <span>Phiếu Soát Xét BLUEMARQ</span>
                   </button>
-
-                  <button 
-                    onClick={handleDownloadDocx}
-                    disabled={acceptedCount === 0}
-                    className={cn(
-                      "flex-1 sm:flex-initial bg-gradient-to-r from-[#C5A059] to-[#D4AF37] hover:from-[#D4AF37] hover:to-[#C5A059] text-[#0B1A2D] font-bold text-xs py-1.5 px-3.5 rounded-lg shadow-lg hover:shadow-[0_4px_16px_rgba(197,160,89,0.4)] transition-all flex items-center justify-center gap-1.5",
-                      acceptedCount === 0 && "opacity-50 cursor-not-allowed"
-                    )}
-                  >
-                    <DownloadCloud className="w-3.5 h-3.5" />
-                    <span>Xuất File Word ({findings ? findings.filter(f => f.accepted && f.actionType !== 'comment_only').length : 0} Sửa + {findings ? findings.filter(f => f.accepted && f.actionType === 'comment_only').length : 0} Comment)</span>
-                  </button>
                 </div>
-              </div>
             )}
 
           </div>
