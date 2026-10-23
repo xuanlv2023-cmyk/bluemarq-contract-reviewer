@@ -73,7 +73,7 @@ export function formatGeminiErrorMessage(rawMsg: any): string {
 /**
  * Lấy danh sách API Keys dạng mảng để xoay vòng (hỗ trợ nhiều key cách nhau bởi dấu phẩy)
  */
-export async function resolveApiKeys(engine: 'gemini' | 'chatgpt' | 'claude' = 'gemini', customKey?: string): Promise<string[]> {
+export async function resolveApiKeys(engine: 'auto' | 'gemini' | 'chatgpt' | 'claude' = 'gemini', customKey?: string): Promise<string[]> {
   const keys: string[] = [];
 
   const addKeysFromString = (str?: string | null) => {

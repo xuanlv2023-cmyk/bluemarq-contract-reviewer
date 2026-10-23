@@ -1291,6 +1291,7 @@ export function ContractReviewer() {
                     <span>Phiếu Soát Xét BLUEMARQ</span>
                   </button>
                 </div>
+              </div>
             )}
 
           </div>
