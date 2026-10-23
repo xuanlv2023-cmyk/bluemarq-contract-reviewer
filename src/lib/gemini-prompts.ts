@@ -127,7 +127,7 @@ Bạn phải phân tích bản thảo hợp đồng qua 5 lăng kính chuyên m�
 - "actionType": "track_change" hoặc "comment_only".
 - "severity": "high" (Nghiêm trọng) | "medium" (Cần lưu ý) | "low" (Lỗi nhỏ).
 
-BẮT BUỘC TRẢ VỀ DUY NHẤT 1 MẢNG JSON ARRAY (Không bọc trong markdown ```json, không có lời mở đầu hay kết luận):
+BẮT BUỘC TRẢ VỀ DUY NHẤT 1 MẢNG JSON ARRAY (Không bọc trong thẻ markdown json, không có lời mở đầu hay kết luận):
 [
   {
     "id": 1,
