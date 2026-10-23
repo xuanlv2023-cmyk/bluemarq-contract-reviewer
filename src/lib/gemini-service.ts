@@ -130,8 +130,8 @@ async function callGeminiWithRotation(
 ): Promise<any[]> {
   const { prompt, mediaFiles = [] } = params;
 
-  // Danh sách model ưu tiên tự động (nếu model mới 3.8 quá tải 503, tự chuyển sang 2.5 hoặc 1.5)
-  const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-1.5-flash'];
+  // Model chuẩn duy nhất theo chỉ định: Gemini 3.8 Flash
+  const GEMINI_MODELS = ['gemini-3.8-flash'];
 
   const parts: any[] = [];
   for (const m of mediaFiles) {
@@ -185,11 +185,16 @@ async function callGeminiWithRotation(
         const rawErr = data?.error?.message || JSON.stringify(data?.error || data);
         lastError = rawErr;
 
+        // Nếu model không tồn tại (404), chuyển ngay lập tức sang model tiếp theo trong 0.1 giây (không xoay key vô ích)
+        if (res.status === 404 || rawErr.includes('not found') || rawErr.includes('not supported')) {
+          break; // Thoát vòng lặp key để thử ngay model tiếp theo
+        }
+
         // Nếu lỗi 503 (quá tải) hoặc 429 (hết quota), tự động xoay sang key kế tiếp ngay lập tức
         if (res.status === 503 || res.status === 429 || rawErr.includes('503') || rawErr.includes('429') || rawErr.includes('demand')) {
           if (kIdx < keys.length - 1) {
             if (onStatusUpdate) onStatusUpdate(`Key ${kIdx + 1} bận/hết lượt. Đang tự động xoay sang Key ${kIdx + 2}...`);
-            await wait(800);
+            await wait(300);
             continue; // Thử key tiếp theo
           }
         } else {
@@ -198,16 +203,16 @@ async function callGeminiWithRotation(
       } catch (err: any) {
         lastError = err?.message || String(err);
         if (kIdx < keys.length - 1) {
-          await wait(800);
+          await wait(300);
           continue;
         }
       }
     }
 
-    // Nếu tất cả các key đều bị 503 trên model hiện tại, chuyển sang model dự phòng tiếp theo
+    // Nếu model này bị lỗi và còn model dự phòng khác, chuyển ngay
     if (mIdx < GEMINI_MODELS.length - 1) {
-      if (onStatusUpdate) onStatusUpdate(`Đang tự động chuyển sang luồng dự phòng tối ưu...`);
-      await wait(1000);
+      if (onStatusUpdate) onStatusUpdate(`Đang chuyển sang luồng AI tốc độ cao...`);
+      await wait(200);
     }
   }
 

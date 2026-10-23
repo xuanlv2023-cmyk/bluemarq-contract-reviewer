@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Scale, FileText, Building, Stamp, CheckCircle2, AlertCircle, 
   Loader2, Search, ArrowRight, XCircle, Info, UploadCloud, X, 
@@ -888,11 +888,8 @@ export function ContractReviewer() {
             <div className="px-5 py-3 border-b border-[#1E3A5F] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-[#13253F] shrink-0">
               <div>
                 <h2 className="font-bold text-[#C5A059] text-xs sm:text-sm tracking-tight uppercase font-serif">
-                  KẾT QUẢ RÀ SOÁT MA TRẬN 5 PHÒNG BAN BLUEMARQ
+                  KẾT QUẢ SOÁT XÉT HỢP ĐỒNG
                 </h2>
-                <p className="text-[11px] text-slate-400">
-                  Pháp chế • Kế toán • QL Chi phí & BOQ • Chọn thầu • Ban Dự án
-                </p>
               </div>
 
               {findings && (

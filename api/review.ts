@@ -45,7 +45,7 @@ export default async function handler(req: any, res: any) {
 
     contentsParts.push({ text: prompt });
 
-    // Model chuẩn: Gemini 3.8 Flash
+    // Model chuẩn duy nhất: Gemini 3.8 Flash
     const targetModel = (model && model.trim()) || 'gemini-3.8-flash';
 
     // Cơ chế tự động thử lại khi Google AI gặp tình trạng quá tải tạm thời (503 / 429)

@@ -77,7 +77,7 @@ async function startServer() {
       // Đính kèm prompt phân tích chi tiết
       contentsParts.push({ text: prompt });
 
-      // Model chuẩn: Gemini 3.8 Flash
+      // Model chuẩn duy nhất: Gemini 3.8 Flash
       const targetModel = (model && model.trim()) || 'gemini-3.8-flash';
 
       // Tự động thử lại khi gặp 503/429
