@@ -7,10 +7,11 @@ export interface AuditReportData {
   reviewDate: string;
   baseDocuments: { title: string; fileName: string; type: string }[];
   findings: FindingToApply[];
+  approvalNote?: string;
 }
 
 export function generateAuditReportHtml(data: AuditReportData): string {
-  const { contractName, reviewerName, reviewDate, baseDocuments, findings } = data;
+  const { contractName, reviewerName, reviewDate, baseDocuments, findings, approvalNote } = data;
 
   const highRisks = findings.filter(f => f.severity === 'high');
   const mediumRisks = findings.filter(f => f.severity === 'medium');
@@ -277,6 +278,7 @@ export function generateAuditReportHtml(data: AuditReportData): string {
           <td>
             <div style="font-weight: bold; color: #0B1A2D; font-size: 12px;">${deptLabel}</div>
             <div style="font-size: 11px; color: #555; margin-top: 2px;">Tiêu chí: <em>${critLabel}</em></div>
+            ${f.page ? `<div style="font-size: 11px; color: #b45309; font-weight: bold; margin-top: 3px;">📍 Trang ${f.page} ${f.clause ? `(${f.clause})` : ''}</div>` : ''}
             <div style="margin-top: 4px;">
               <span class="${f.severity === 'high' ? 'badge-high' : f.severity === 'medium' ? 'badge-medium' : 'badge-low'}">
                 [${f.severity === 'high' ? 'NGHIÊM TRỌNG' : f.severity === 'medium' ? 'CẦN LƯU Ý' : 'LỖI NHỎ'}]
@@ -303,9 +305,15 @@ export function generateAuditReportHtml(data: AuditReportData): string {
     </tbody>
   </table>
 
-  <!-- IV. KHU VỰC KÝ DUYỆT 5 PHÒNG BAN CHUYÊN MÔN -->
+  <!-- IV. Ý KIẾN PHÊ DUYỆT & KẾT LUẬN CỦA NGƯỜI SOÁT XÉT -->
   <div class="section-header">
-    <span>IV. XÁC NHẬN CỦA CÁC BỘ PHẬN SOÁT XÉT</span>
+    <span>IV. Ý KIẾN PHÊ DUYỆT & KẾT LUẬN CỦA NGƯỜI SOÁT XÉT</span>
+  </div>
+  <div style="background: #f8fafc; border: 1.5px solid #cbd5e1; border-radius: 6px; padding: 12px 16px; font-size: 13px; line-height: 1.6; color: #1e293b; margin-bottom: 22px; white-space: pre-wrap; font-family: 'Times New Roman', serif;">${approvalNote || '- Vui lòng kiểm tra và điều chỉnh theo ý kiến của BP.QLHĐ tại file đính kèm và các phòng ban khác trước khi phát hành.\n- Đồng ý.'}</div>
+
+  <!-- V. KHU VỰC KÝ DUYỆT 5 PHÒNG BAN CHUYÊN MÔN -->
+  <div class="section-header">
+    <span>V. XÁC NHẬN CỦA CÁC BỘ PHẬN SOÁT XÉT</span>
   </div>
   
   <div class="signatures-grid">

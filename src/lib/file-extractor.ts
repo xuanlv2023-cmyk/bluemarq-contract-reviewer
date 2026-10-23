@@ -23,19 +23,39 @@ export async function extractDocxText(file: File): Promise<string> {
     const parser = new DOMParser();
     const doc = parser.parseFromString(documentXml, 'application/xml');
 
-    // Quét từng đoạn văn (w:p) và từng ô bảng (w:tc)
+    // Quét từng đoạn văn (w:p) và từng ô bảng (w:tc) có nhận diện số trang
     const paragraphs = doc.querySelectorAll('w\\:p, p');
     const resultLines: string[] = [];
+    let currentPage = 1;
+    let hasRenderedPageBreaks = false;
 
+    // Kiểm tra xem file có thẻ ngắt trang in của Word không
+    if (documentXml.includes('lastRenderedPageBreak') || documentXml.includes('w:type="page"')) {
+      hasRenderedPageBreaks = true;
+    }
+
+    let lineIndex = 0;
     paragraphs.forEach((p) => {
+      // Đếm số lần ngắt trang trong đoạn này (Word tự ghi nhận khi soạn thảo)
+      if (hasRenderedPageBreaks) {
+        const pageBreaks = p.querySelectorAll('w\\:lastRenderedPageBreak, lastRenderedPageBreak, w\\:br[w\\:type="page"], br[type="page"]');
+        if (pageBreaks.length > 0) {
+          currentPage += pageBreaks.length;
+        }
+      }
+
       // Lấy toàn bộ w:t trong đoạn
       const textNodes = p.querySelectorAll('w\\:t, t');
       let pText = '';
       textNodes.forEach((t) => {
         pText += t.textContent || '';
       });
-      if (pText.trim()) {
-        resultLines.push(pText.trim());
+      const trimmed = pText.trim();
+      if (trimmed) {
+        lineIndex++;
+        // Nếu không có thẻ ngắt trang của Word thì ước tính ~32 đoạn văn bản mỗi trang
+        const displayPage = hasRenderedPageBreaks ? currentPage : Math.max(1, Math.ceil(lineIndex / 32));
+        resultLines.push(`[Trang ${displayPage}] ${trimmed}`);
       }
     });
 

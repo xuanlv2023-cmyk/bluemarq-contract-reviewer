@@ -1,10 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
+﻿import React, { useState, useRef, useEffect } from 'react';
 import { 
   Scale, FileText, Building, Stamp, CheckCircle2, AlertCircle, 
   Loader2, Search, ArrowRight, XCircle, Info, UploadCloud, X, 
   File, Plus, FileSymlink, FileArchive, FileImage, Settings, Key, Check, DownloadCloud,
   Calculator, CheckSquare, Square, Filter, FileSpreadsheet, Eye, Printer, Trash2,
-  UserCheck, RefreshCw, ChevronDown, ChevronUp, Layers
+  UserCheck, RefreshCw, ChevronDown, ChevronUp, Layers, Copy
 } from 'lucide-react';
 import { cn } from '../utils';
 import { processFile, ProcessedDoc } from '../lib/file-extractor';
@@ -175,6 +175,11 @@ export function ContractReviewer() {
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+
+  // Ý kiến phê duyệt đề xuất (cho BPM)
+  const [approvalNote, setApprovalNote] = useState<string>('');
+  const [copiedNote, setCopiedNote] = useState(false);
+  const [conclusionType, setConclusionType] = useState<'conditional' | 'approved' | 'rejected'>('conditional');
 
   // Bộ lọc & Tìm kiếm
   const [searchQuery, setSearchQuery] = useState('');
@@ -403,6 +408,16 @@ export function ContractReviewer() {
       });
 
       setFindings(formattedFindings);
+
+      // Kiểm tra xem có nội dung nào chưa có trong Tờ trình phê duyệt hay không
+      const hasUnapprovedTerms = formattedFindings.some(f => 
+        f.category === 'submission_mismatch' || 
+        (f.issue && f.issue.toLowerCase().includes('chưa có trong tờ trình')) ||
+        (f.reason && f.reason.toLowerCase().includes('chưa có trong tờ trình'))
+      );
+      const defaultConclusion = hasUnapprovedTerms ? 'rejected' : 'conditional';
+      setConclusionType(defaultConclusion);
+      setApprovalNote(buildApprovalNote(formattedFindings, defaultConclusion));
     } catch (err: any) {
       console.error(err);
       setError(formatGeminiErrorMessage(err.message || err));
@@ -410,6 +425,52 @@ export function ContractReviewer() {
       setIsLoading(false);
       setLoadingStep('');
     }
+  };
+
+  // Tạo nội dung ý kiến phê duyệt BPM ngắn gọn (vài gạch đầu dòng + kết luận)
+  const buildApprovalNote = (items: FindingWithSelection[], type: 'conditional' | 'approved' | 'rejected' = 'conditional') => {
+    const activeItems = (items || []).filter(f => f.accepted !== false);
+    const lines: string[] = [];
+    
+    if (activeItems.length > 0) {
+      // Chỉ lấy 3-5 ý kiến cốt lõi nhất, ngắn gọn không rườm rà
+      activeItems.slice(0, 5).forEach(f => {
+        lines.push(`- ${f.issue.trim()}`);
+      });
+    } else {
+      lines.push('- Hồ sơ hợp đồng phù hợp với Tờ trình và các hồ sơ căn cứ được duyệt.');
+    }
+
+    if (type === 'conditional') {
+      if (activeItems.length > 0) {
+        lines.push('- Vui lòng kiểm tra và điều chỉnh theo ý kiến của BP.QLHĐ tại file đính kèm và các phòng ban khác trước khi phát hành.');
+        lines.push('- Đồng ý.');
+      } else {
+        lines.push('- Đồng ý.');
+      }
+    } else if (type === 'approved') {
+      lines.push('- Đồng ý.');
+    } else {
+      // Trường hợp có nội dung chưa có trong Tờ trình hoặc sai phạm: Bắt buộc trình xin Ban TGĐ phê duyệt bổ sung
+      lines.push('- Yêu cầu Người trình tiến hành lập Tờ trình xin Ban TGĐ phê duyệt bổ sung hoặc điều chỉnh đối với các nội dung chưa có trong Tờ trình trước khi ký phát hành.');
+      lines.push('- Không đồng ý.');
+    }
+
+    return lines.join('\n');
+  };
+
+  const applyConclusion = (type: 'conditional' | 'approved' | 'rejected') => {
+    setConclusionType(type);
+    if (findings) {
+      setApprovalNote(buildApprovalNote(findings, type));
+    }
+  };
+
+  const handleCopyApprovalNote = () => {
+    if (!approvalNote) return;
+    navigator.clipboard.writeText(approvalNote);
+    setCopiedNote(true);
+    setTimeout(() => setCopiedNote(false), 2500);
   };
 
   // Toggle chấp nhận / bỏ qua sửa đổi cho 1 finding
@@ -433,13 +494,12 @@ export function ContractReviewer() {
     setFindings(findings.map(f => ({ ...f, accepted: select })));
   };
 
-  // Tải xuống file Word có Track Changes & Comments (hỗ trợ xuất riêng phòng ban hoặc tổng hợp)
-  const handleDownloadDocx = async (scope: 'my_department' | 'all' = 'my_department') => {
+  // Tải xuống file Word có Track Changes & Comments đầy đủ toàn diện
+  const handleDownloadDocx = async (scope: 'all' | 'my_department' = 'all') => {
     if (!hopDongFile || !findings) return;
     try {
       const deptTitle = DEPT_TITLE_MAP[reviewerDepartment] || 'Ban Pháp Chế';
-      const scopeLabel = scope === 'my_department' ? deptTitle.replace(/\s+/g, '_') : 'Tong_Hop_5_Phong_Ban';
-      const outputName = hopDongFile.name.replace(/\.docx$/i, '') + `_Da_Soat_Xet_${reviewerName.replace(/\s+/g, '_')}_${scopeLabel}.docx`;
+      const outputName = hopDongFile.name.replace(/\.docx$/i, '') + `_Da_Soat_Xet_${reviewerName.replace(/\s+/g, '_')}_${deptTitle.replace(/\s+/g, '_')}.docx`;
       
       const applied = await downloadTrackedDocx(
         hopDongFile, 
@@ -456,7 +516,7 @@ export function ContractReviewer() {
       const trackCount = targetFindings.filter(f => f.actionType !== 'comment_only').length;
       const commentCount = targetFindings.filter(f => f.actionType === 'comment_only').length;
 
-      alert(`Đã xuất thành công file Word cho [${scope === 'my_department' ? deptTitle : 'Tổng Hợp 5 Phòng Ban'}]!\n• Tác giả: ${reviewerName} (${deptTitle})\n• ${trackCount} nội dung gạch sửa trực tiếp (Track Changes)\n• ${commentCount} ý kiến đề xuất gắn bóng Comment bên lề.`);
+      alert(`Đã xuất thành công file Word đã soát xét!\n• Tác giả: ${reviewerName} (${deptTitle})\n• ${trackCount} nội dung gạch sửa trực tiếp (Track Changes)\n• ${commentCount} ý kiến đề xuất gắn bóng Comment bên lề.\n• Tệp lưu: ${outputName}`);
     } catch (err: any) {
       console.error(err);
       alert(`Lỗi khi tạo Track Changes: ${err.message}`);
@@ -484,6 +544,7 @@ export function ContractReviewer() {
       reviewDate: new Date().toLocaleDateString('vi-VN', { year: 'numeric', month: 'long', day: 'numeric' }),
       baseDocuments: baseDocsList,
       findings,
+      approvalNote,
     };
 
     downloadAuditReport(reportData, `Bien_Ban_Soat_Xet_${hopDongFile.name.replace(/\.docx$/i, '')}.html`);
@@ -1136,6 +1197,12 @@ export function ContractReviewer() {
                                                   #{idx + 1}
                                                 </span>
 
+                                                {(item.page || item.clause) && (
+                                                  <span className="text-[10px] text-[#C5A059] bg-[#C5A059]/15 px-2 py-0.5 rounded border border-[#C5A059]/40 font-bold inline-flex items-center gap-1 shadow-sm">
+                                                    📍 {item.page ? `Trang ${item.page}` : ''} {item.clause ? `(${item.clause})` : ''}
+                                                  </span>
+                                                )}
+
                                                 {item.criterion && (
                                                   <span className="text-[10px] text-slate-300 bg-[#0B1A2D] px-2 py-0.5 rounded border border-[#1E3A5F] font-medium">
                                                     Tiêu chí: <strong>{item.criterion}</strong>
@@ -1147,11 +1214,11 @@ export function ContractReviewer() {
                                                 </span>
 
                                                 {item.actionType === 'comment_only' ? (
-                                                  <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-amber-950/80 text-amber-300 border border-amber-700/60 inline-flex items-center gap-1">
+                                                  <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-[#0B1A2D] text-slate-300 border border-slate-700/60 font-medium inline-flex items-center gap-1">
                                                     💬 Chỉ Comment
                                                   </span>
                                                 ) : (
-                                                  <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-emerald-950/80 text-emerald-300 border border-emerald-700/60 inline-flex items-center gap-1">
+                                                  <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-[#0B1A2D] text-[#C5A059] border border-[#C5A059]/40 font-medium inline-flex items-center gap-1">
                                                     ✍️ Sửa trực tiếp (Track)
                                                   </span>
                                                 )}
@@ -1190,56 +1257,56 @@ export function ContractReviewer() {
 
                                           {/* So sánh Đoạn gốc vs Đề xuất sửa */}
                                           {item.actionType === 'comment_only' ? (
-                                            <div className="p-2.5 sm:p-3 flex flex-col sm:flex-row gap-2.5 bg-[#0B1A2D]/40 text-xs">
+                                            <div className="p-2.5 sm:p-3 flex flex-col sm:flex-row gap-2.5 bg-[#0B1A2D]/50 text-xs">
                                               <div className="flex-1 space-y-1">
-                                                <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
-                                                  <FileText className="w-3 h-3 text-slate-400" /> Đoạn hợp đồng gốc liên quan (Giữ nguyên trong file Word)
+                                                <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                                                  <FileText className="w-3.5 h-3.5 text-slate-400" /> Văn bản gốc trong hợp đồng (Giữ nguyên)
                                                 </div>
-                                                <div className="p-2 bg-slate-900/50 rounded border border-slate-700/40">
-                                                  <p className="text-slate-300 font-serif text-[11px] leading-relaxed whitespace-pre-wrap">
+                                                <div className="p-2.5 bg-[#0A1626] rounded-lg border border-slate-700/60 shadow-inner">
+                                                  <p className="text-slate-100 font-serif text-[12px] leading-relaxed whitespace-pre-wrap">
                                                     {item.original}
                                                   </p>
                                                 </div>
                                               </div>
 
-                                              <div className="hidden sm:flex flex-col items-center justify-center text-slate-600">
+                                              <div className="hidden sm:flex flex-col items-center justify-center text-slate-500">
                                                 <ArrowRight className="w-3.5 h-3.5" />
                                               </div>
 
                                               <div className="flex-1 space-y-1">
-                                                <div className="text-[9px] font-bold text-amber-400 uppercase tracking-widest flex items-center gap-1">
-                                                  <Info className="w-3 h-3 text-amber-400" /> Ý kiến kiến nghị / Đề xuất (Chỉ chèn bóng Comment bên lề)
+                                                <div className="text-[10px] font-semibold text-[#C5A059] uppercase tracking-wider flex items-center gap-1.5">
+                                                  <Info className="w-3.5 h-3.5 text-[#C5A059]" /> Ý kiến kiến nghị / Đề xuất (Chèn Comment)
                                                 </div>
-                                                <div className="p-2 bg-amber-950/20 rounded border border-amber-900/40">
-                                                  <p className="text-amber-200 font-serif text-[11px] leading-relaxed whitespace-pre-wrap">
+                                                <div className="p-2.5 bg-[#13253F] rounded-lg border border-[#C5A059]/40 shadow-sm">
+                                                  <p className="text-[#E2C785] font-serif text-[12px] leading-relaxed whitespace-pre-wrap">
                                                     {item.suggestion}
                                                   </p>
                                                 </div>
                                               </div>
                                             </div>
                                           ) : (
-                                            <div className="p-2.5 sm:p-3 flex flex-col sm:flex-row gap-2.5 bg-[#0B1A2D]/40 text-xs">
+                                            <div className="p-2.5 sm:p-3 flex flex-col sm:flex-row gap-2.5 bg-[#0B1A2D]/50 text-xs">
                                               <div className="flex-1 space-y-1">
-                                                <div className="text-[9px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1">
-                                                  <FileText className="w-3 h-3 text-red-400" /> Bản thảo gốc (Sẽ gạch đỏ xóa bỏ)
+                                                <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                                                  <FileText className="w-3.5 h-3.5 text-slate-400" /> Văn bản gốc trong hợp đồng
                                                 </div>
-                                                <div className="p-2 bg-red-950/20 rounded border border-red-900/30">
-                                                  <p className="text-red-400/90 font-serif text-[11px] leading-relaxed line-through decoration-red-500/50 italic whitespace-pre-wrap">
+                                                <div className="p-2.5 bg-[#0A1626] rounded-lg border border-slate-700/60 shadow-inner">
+                                                  <p className="text-slate-100 font-serif text-[12px] leading-relaxed line-through decoration-slate-400/80 whitespace-pre-wrap">
                                                     {item.original}
                                                   </p>
                                                 </div>
                                               </div>
 
-                                              <div className="hidden sm:flex flex-col items-center justify-center text-slate-600">
+                                              <div className="hidden sm:flex flex-col items-center justify-center text-slate-500">
                                                 <ArrowRight className="w-3.5 h-3.5" />
                                               </div>
 
                                               <div className="flex-1 space-y-1">
-                                                <div className="text-[9px] font-bold text-emerald-400 uppercase tracking-widest flex items-center gap-1">
-                                                  <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Nội dung chuẩn thay thế (Sẽ chèn chữ mới)
+                                                <div className="text-[10px] font-semibold text-[#C5A059] uppercase tracking-wider flex items-center gap-1.5">
+                                                  <CheckCircle2 className="w-3.5 h-3.5 text-[#C5A059]" /> Đề xuất điều chỉnh chuẩn (Sẽ chèn Track)
                                                 </div>
-                                                <div className="p-2 bg-emerald-950/30 rounded border border-emerald-900/50">
-                                                  <p className="text-emerald-300 font-serif text-[11px] leading-relaxed font-semibold whitespace-pre-wrap">
+                                                <div className="p-2.5 bg-[#13253F] rounded-lg border border-[#C5A059]/40 shadow-sm">
+                                                  <p className="text-[#E2C785] font-serif text-[12px] leading-relaxed font-medium whitespace-pre-wrap">
                                                     {item.suggestion}
                                                   </p>
                                                 </div>
@@ -1257,6 +1324,98 @@ export function ContractReviewer() {
                         })}
                     </div>
                   )}
+
+                  {/* KHỐI Ý KIẾN PHÊ DUYỆT ĐỀ XUẤT (DÙNG CHO TỜ TRÌNH / HỆ THỐNG BPM) */}
+                  <div className="bg-[#10223A] rounded-xl border border-[#C5A059]/40 p-4 shadow-xl space-y-3 mt-4">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">📝</span>
+                        <div>
+                          <h4 className="text-xs font-bold text-slate-100 uppercase tracking-wider flex items-center gap-1.5">
+                            <span>Ý Kiến Phê Duyệt Đề Xuất</span>
+                            <span className="text-[10px] bg-[#C5A059]/20 text-[#C5A059] px-1.5 py-0.5 rounded border border-[#C5A059]/40 font-normal">
+                              Dùng cho ô "Nội dung phê duyệt" trên BPM
+                            </span>
+                          </h4>
+                          <p className="text-[10.5px] text-slate-400">
+                            Vài gạch đầu dòng ngắn gọn theo đúng chuẩn điều hành — Bấm sao chép để dán vào tờ trình số
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* 3 nút chọn nhanh trạng thái kết luận */}
+                      <div className="flex items-center gap-1 bg-[#0B1A2D] p-1 rounded-lg border border-[#1E3A5F]">
+                        <button
+                          type="button"
+                          onClick={() => applyConclusion('conditional')}
+                          className={cn(
+                            "px-2 py-0.5 rounded text-[10px] font-bold transition-all",
+                            conclusionType === 'conditional'
+                              ? "bg-[#C5A059] text-[#0B1A2D] shadow"
+                              : "text-slate-400 hover:text-slate-200"
+                          )}
+                          title="Đồng ý kèm yêu cầu điều chỉnh theo file đính kèm"
+                        >
+                          ✓ Đồng ý (Kèm điều chỉnh)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => applyConclusion('approved')}
+                          className={cn(
+                            "px-2 py-0.5 rounded text-[10px] font-bold transition-all",
+                            conclusionType === 'approved'
+                              ? "bg-emerald-600 text-white shadow"
+                              : "text-slate-400 hover:text-slate-200"
+                          )}
+                          title="Đồng ý hoàn toàn"
+                        >
+                          ✓ Đồng ý
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => applyConclusion('rejected')}
+                          className={cn(
+                            "px-2 py-0.5 rounded text-[10px] font-bold transition-all",
+                            conclusionType === 'rejected'
+                              ? "bg-red-600 text-white shadow"
+                              : "text-slate-400 hover:text-slate-200"
+                          )}
+                          title="Không đồng ý"
+                        >
+                          ✗ Không đồng ý
+                        </button>
+                      </div>
+                    </div>
+
+                    <textarea
+                      value={approvalNote}
+                      onChange={(e) => setApprovalNote(e.target.value)}
+                      rows={4}
+                      className="w-full bg-[#0B1A2D] border border-[#1E3A5F] focus:border-[#C5A059] text-slate-200 text-xs rounded-lg p-3 font-mono leading-relaxed focus:outline-none transition-colors select-text"
+                      placeholder="Ý kiến phê duyệt tóm tắt..."
+                    />
+
+                    <div className="flex items-center justify-between gap-3 pt-0.5">
+                      <p className="text-[11px] text-slate-400 italic">
+                        💡 Bạn có thể trực tiếp gõ chỉnh sửa thêm bớt vào ô trên trước khi sao chép.
+                      </p>
+                      
+                      <button
+                        type="button"
+                        onClick={handleCopyApprovalNote}
+                        className={cn(
+                          "px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-md shrink-0 cursor-pointer",
+                          copiedNote
+                            ? "bg-emerald-600 text-white"
+                            : "bg-gradient-to-r from-[#C5A059] to-[#D4AF37] hover:from-[#D4AF37] hover:to-[#C5A059] text-[#0B1A2D]"
+                        )}
+                        title="Sao chép nội dung để dán sang BPM"
+                      >
+                        {copiedNote ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                        <span>{copiedNote ? 'Đã sao chép vào bộ nhớ!' : 'Sao chép ý kiến phê duyệt'}</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               ) : (
                 
@@ -1285,31 +1444,21 @@ export function ContractReviewer() {
                   <span>Tác giả: <strong className="text-white">{reviewerName || 'xuanlv'}</strong> (<span className="text-[#C5A059] font-semibold">{DEPT_TITLE_MAP[reviewerDepartment] || 'Ban Pháp Chế'}</span>)</span>
                 </div>
 
-                <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto">
-                  {/* NÚT CHÍNH: XUẤT WORD ĐÚNG THEO PHÒNG BAN CỦA NGƯỜI DÙNG */}
-                  <button
-                    onClick={() => handleDownloadDocx('my_department')}
-                    className="flex-1 sm:flex-initial bg-gradient-to-r from-[#C5A059] to-[#D4AF37] hover:from-[#D4AF37] hover:to-[#C5A059] text-[#0B1A2D] font-extrabold text-xs py-2 px-3.5 rounded-lg shadow-md hover:shadow-[0_4px_16px_rgba(197,160,89,0.4)] transition-all flex items-center justify-center gap-1.5"
-                    title={`Xuất file Word chỉ gồm các điểm Track Changes và Comments của ${DEPT_TITLE_MAP[reviewerDepartment]}`}
-                  >
-                    <DownloadCloud className="w-3.5 h-3.5" />
-                    <span>Xuất Word ({DEPT_TITLE_MAP[reviewerDepartment] || 'Phòng ban'})</span>
-                  </button>
-
-                  {/* NÚT PHỤ: XUẤT WORD TỔNG HỢP CẢ 5 PHÒNG BAN */}
+                <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap w-full sm:w-auto">
+                  {/* NÚT CHÍNH: XUẤT FILE WORD ĐÃ SOÁT XÉT ĐẦY ĐỦ */}
                   <button
                     onClick={() => handleDownloadDocx('all')}
-                    className="flex-1 sm:flex-initial bg-[#13253F] hover:bg-[#1E3A5F] border border-[#1E3A5F] text-slate-200 font-semibold text-xs py-2 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5"
-                    title="Xuất file Word tổng hợp toàn bộ nhận xét của cả 5 phòng ban"
+                    className="flex-1 sm:flex-initial bg-gradient-to-r from-[#C5A059] to-[#D4AF37] hover:from-[#D4AF37] hover:to-[#C5A059] text-[#0B1A2D] font-extrabold text-xs py-2 px-4 rounded-lg shadow-md hover:shadow-[0_4px_16px_rgba(197,160,89,0.4)] transition-all flex items-center justify-center gap-1.5"
+                    title="Xuất file Word đầy đủ toàn bộ nhận xét đã duyệt dưới tên của người soát xét"
                   >
-                    <FileText className="w-3.5 h-3.5 text-[#C5A059]" />
-                    <span>Xuất Word Tổng Hợp</span>
+                    <DownloadCloud className="w-4 h-4" />
+                    <span>Xuất File Word Đã Soát Xét</span>
                   </button>
 
                   {/* NÚT BIÊN BẢN: PHIẾU SOÁT XÉT BLUEMARQ */}
                   <button
                     onClick={handleDownloadReport}
-                    className="flex-1 sm:flex-initial bg-[#13253F] hover:bg-[#1E3A5F] border border-[#1E3A5F] text-slate-200 font-semibold text-xs py-2 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5"
+                    className="flex-1 sm:flex-initial bg-[#13253F] hover:bg-[#1E3A5F] border border-[#1E3A5F] text-slate-200 font-semibold text-xs py-2 px-3.5 rounded-lg transition-all flex items-center justify-center gap-1.5"
                     title="Tải Phiếu Soát Xét chuẩn Tập đoàn BLUEMARQ (HTML / In ấn)"
                   >
                     <Printer className="w-3.5 h-3.5 text-[#C5A059]" />

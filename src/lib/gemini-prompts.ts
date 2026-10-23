@@ -51,10 +51,17 @@ ${boqText || '(Không cung cấp)'}
 [7. CÁC TÀI LIỆU BỔ TRỢ, VĂN BẢN XIN ĐIỀU CHỈNH, PHỤ LỤC BỔ SUNG (NẾU CÓ)]:
 ${extraDocsText || '(Không có)'}
 
-==================== NGUYÊN TẮC PHÁP LÝ TỐI THƯỢNG: THỨ TỰ HIỆU LỰC ====================
-⚡ NGUYÊN TẮC ƯU TIÊN VĂN BẢN ĐIỀU CHỈNH PHÁT HÀNH SAU:
+==================== NGUYÊN TẮC PHÁP LÝ TỐI THƯỢNG: THỨ TỰ HIỆU LỰC & THẨM QUYỀN ====================
+⚡ NGUYÊN TẮC 1: ƯU TIÊN VĂN BẢN ĐIỀU CHỈNH PHÁT HÀNH SAU:
 - Nếu trong mục [7. CÁC TÀI LIỆU BỔ TRỢ, VĂN BẢN XIN ĐIỀU CHỈNH] có văn bản xin điều chỉnh, phê duyệt nội dung bổ sung phát hành sau: VĂN BẢN NÀY CÓ HIỆU LỰC CAO NHẤT, THAY THẾ CHO CÁC QUY ĐỊNH CŨ TRONG TỜ TRÌNH HAY CĂN CỨ BAN ĐẦU.
 - VÍ DỤ: Tờ trình ban đầu ghi "Tạm ứng 20% trước thuế", nhưng Văn bản bổ trợ đã xin duyệt điều chỉnh sang "Tạm ứng 20% sau thuế", thì BẮT BUỘC LẤY QUY ĐỊNH SAU THUẾ LÀM CHUẨN ĐÚNG. Nếu Bản thảo hợp đồng ghi "tạm ứng sau thuế", bạn TUYỆT ĐỐI KHÔNG ĐƯỢC BÁO LỖI SAI!
+
+⚡ NGUYÊN TẮC 2: QUY TẮC BẤT KHẢ XÂM PHẠM VỀ CÁC NỘI DUNG CHƯA CÓ TRONG TỜ TRÌNH:
+- Đối với bất kỳ điều khoản, phạm vi công việc, chi phí, trách nhiệm hoặc cơ chế thanh toán nào xuất hiện trong Bản thảo hợp đồng mà CHƯA ĐƯỢC PHÊ DUYỆT TRONG TỜ TRÌNH CHỦ TRƯƠNG (hoặc văn bản phê duyệt điều chỉnh):
+  + BẮT BUỘC người trình phải tiến hành lập Tờ trình xin Ban Tổng Giám đốc (Ban TGĐ) phê duyệt bổ sung hoặc điều chỉnh.
+  + MẶC NHIÊN LÀ KHÔNG ĐỒNG Ý (severity: "high", category: "submission_mismatch", actionType: "comment_only"). TUYỆT ĐỐI KHÔNG ĐƯỢC DUYỆT THÔNG QUA!
+  + Do luồng duyệt trên hệ thống BPM không có chức năng "trả về" (chỉ có thể bấm phê duyệt để đẩy lên cấp trên), người duyệt chỉ có thể ghi rõ ý kiến không đồng ý để Ban Lãnh đạo / Ban TGĐ xem xét quyết định cuối cùng.
+  + Trong trường "issue", ghi rõ: "Chưa có trong Tờ trình phê duyệt, bắt buộc Người trình phải lập Tờ trình xin Ban TGĐ phê duyệt bổ sung/điều chỉnh."
 
 ==================== TÀI LIỆU CẦN SOÁT XÉT (BẢN THẢO HỢP ĐỒNG) ====================
 ${hopDongText}
@@ -111,17 +118,21 @@ Bạn phải phân tích bản thảo hợp đồng qua 5 lăng kính chuyên m�
    - Với loại này: File Word GIỮ NGUYÊN 100% VĂN BẢN GỐC, CHỈ CHÈN BONG BÓNG COMMENT BÊN LỀ PHẢI.
 
 ==================== QUY ĐỊNH CỰC KỲ QUAN TRỌNG VỀ ĐỊNH DẠNG JSON ====================
-- "original": NGUYÊN VĂN 100% CỤM TỪ / CÂU XUẤT HIỆN TRONG BẢN THẢO HỢP ĐỒNG Ở TRÊN! Không tóm tắt, không sửa chữ nào, vì Word sẽ tìm chính xác cụm từ này để gắn Track Change/Comment.
+- "page": SỐ TRANG NGUYÊN BẢN (number hoặc string, ví dụ: 18) dựa vào nhãn [Trang X] ở đầu mỗi đoạn trong bản thảo hợp đồng.
+- "clause": Tên điều khoản hoặc vị trí cụ thể (ví dụ: "Điều 6.2", "Điều 9.3", "Mở đầu").
+- "original": NGUYÊN VĂN 100% CỤM TỪ / CÂU XUẤT HIỆN TRONG BẢN THẢO HỢP ĐỒNG Ở TRÊN (LƯU Ý: Không bao gồm tiền tố [Trang X] trong chuỗi original)!
 - "department": Bắt buộc thuộc 1 trong 5 phòng ban: "legal" | "accounting" | "cost_qs" | "procurement" | "pm_site".
 - "departmentName": Tên phòng ban tiếng Việt tương ứng: "Ban Pháp Chế" | "Phòng Kế Toán" | "Phòng QLCP & Khối Lượng" | "Ban Chọn Thầu - Cung Ứng" | "Ban Điều Hành Dự Án".
-- "criterion": Tên tiêu chuẩn soát xét cụ thể (ví dụ: "Chủ thể ký kết & Thẩm quyền", "Bản chất Tiền tạm ứng & Hóa đơn", "Hồ sơ BOQ & Đơn giá", "Tiến độ thực hiện", "Logic Hợp đồng & Phụ lục"...).
+- "criterion": Tên tiêu chuẩn soát xét cụ thể (ví dụ: "Chủ thể ký kết & Thẩm quyền", "Bản chất Tiền tạm ứng & Hóa đơn", "Hồ sơ BOQ & Đơn giá", "Tiến độ thực hiện", "Bồi thường thiệt hại định trước"...).
 - "actionType": "track_change" hoặc "comment_only".
 - "severity": "high" (Nghiêm trọng) | "medium" (Cần lưu ý) | "low" (Lỗi nhỏ).
 
-BẮT BUỘC TRẢ VỀ DUY NHẤT 1 MẢNG JSON ARRAY (Không bọc trong markdown \`\`\`json, không có lời mở đầu hay kết luận):
+BẮT BUỘC TRẢ VỀ DUY NHẤT 1 MẢNG JSON ARRAY (Không bọc trong markdown ```json, không có lời mở đầu hay kết luận):
 [
   {
     "id": 1,
+    "page": 1,
+    "clause": "Mở đầu",
     "department": "legal",
     "departmentName": "Ban Pháp Chế",
     "criterion": "Chủ thể ký kết & Thẩm quyền",
@@ -135,15 +146,17 @@ BẮT BUỘC TRẢ VỀ DUY NHẤT 1 MẢNG JSON ARRAY (Không bọc trong markd
   },
   {
     "id": 2,
-    "department": "accounting",
-    "departmentName": "Phòng Kế Toán",
-    "criterion": "Bản chất Tiền tạm ứng & Hóa đơn VAT",
-    "actionType": "comment_only",
+    "page": 18,
+    "clause": "Điều 6.2",
+    "department": "cost_qs",
+    "departmentName": "Phòng QLCP & Khối Lượng",
+    "criterion": "Bồi thường thiệt hại định trước",
+    "actionType": "track_change",
     "category": "financial_boq",
-    "issue": "Quy định tiền tạm ứng là tiền cọc chưa phù hợp luật thuế dịch vụ",
-    "original": "nguyên văn câu điều khoản dùng từ tiền cọc trong hợp đồng",
-    "suggestion": "Đề xuất sửa cụm từ 'tiền cọc' thành 'tiền tạm ứng' và nhất quán trong toàn bộ hợp đồng.",
-    "reason": "Hợp đồng dịch vụ khi nhận tiền phải xuất hóa đơn VAT, do đó bản chất là tiền tạm ứng theo quy định của thuế.",
+    "issue": "Chưa cập nhật nội dung 'Không áp dụng Bồi thường thiệt hại định trước' theo Văn bản điều chỉnh đã duyệt",
+    "original": "6.2. Thiệt hại định trước áp dụng cho gói thầu (nếu có): Không được tính trùng với khoản bồi thường cho cùng một thiệt hại.",
+    "suggestion": "6.2. Thiệt hại định trước áp dụng cho gói thầu: Không áp dụng.",
+    "reason": "Căn cứ Văn bản phê duyệt điều chỉnh số 202610130017 của Ban Tổng Giám đốc.",
     "severity": "high"
   }
 ]`;
